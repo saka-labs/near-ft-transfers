@@ -8,6 +8,7 @@ const db = new Database(":memory:");
 const queue = new Queue(db);
 
 const executor = new Executor(queue);
+executor.start();
 
 const app = new Hono();
 app.post("/transfer", async (c) => {
