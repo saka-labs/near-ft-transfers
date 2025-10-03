@@ -6,8 +6,4 @@ export class Executor {
   constructor(queue: Queue) {
     this.queue = queue;
   }
-
-  async push(transfer: TransferRequest) {
-    console.log("pushing transfer to queue:", transfer);
-  }
 }

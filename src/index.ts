@@ -6,6 +6,7 @@ import { Queue } from "./queue";
 
 const db = new Database(":memory:");
 const queue = new Queue(db);
+
 const executor = new Executor(queue);
 
 const app = new Hono();
@@ -17,7 +18,7 @@ app.post("/transfer", async (c) => {
     return c.json({ error: result.error.issues }, 400);
   }
 
-  executor.push(result.data);
+  queue.push(result.data);
 
   return c.json({ success: true }, 200);
 });
@@ -32,7 +33,7 @@ app.post("/transfers", async (c) => {
 
   const transfers = result.data;
   for (const transfer of transfers) {
-    executor.push(transfer);
+    queue.push(transfer);
   }
 
   return c.json({ success: true }, 200);

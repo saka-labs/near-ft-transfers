@@ -23,22 +23,53 @@ export class Queue {
         error_message TEXT
       )
     `);
-    // Index for efficient pending queries
+    // Index for efficient pending queries by status
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_status ON queue(status)`);
+    // Index for efficient lookup by account_id and status (for deduplication)
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_account_status ON queue(receiver_account_id, status)`,
+    );
   }
 
   push(transfer: TransferRequest) {
     const now = Date.now();
-    this.db.run(
-      "INSERT INTO queue (receiver_account_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      [
-        transfer.receiver_account_id,
-        transfer.amount,
-        QueueStatus.PENDING,
-        now,
-        now,
-      ],
-    );
+
+    const tx = this.db.transaction(() => {
+      // Check if there's a pending transaction for the same account
+      const existing = this.db
+        .query(
+          "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND status = ? LIMIT 1",
+        )
+        .get(transfer.receiver_account_id, QueueStatus.PENDING) as {
+        id: number;
+        amount: string;
+      } | null;
+
+      if (existing) {
+        // Add amounts together (both are string numbers)
+        const newAmount = (
+          BigInt(existing.amount) + BigInt(transfer.amount)
+        ).toString();
+        this.db.run(
+          "UPDATE queue SET amount = ?, updated_at = ? WHERE id = ?",
+          [newAmount, now, existing.id],
+        );
+      } else {
+        // Create new entry
+        this.db.run(
+          "INSERT INTO queue (receiver_account_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+          [
+            transfer.receiver_account_id,
+            transfer.amount,
+            QueueStatus.PENDING,
+            now,
+            now,
+          ],
+        );
+      }
+    });
+
+    tx();
   }
 
   pull(limit: number = 10): QueueItem[] {
