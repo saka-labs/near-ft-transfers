@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { Queue } from "./queue";
-import type { TransferRequest } from "./types";
+import { Queue } from ".";
+import type { TransferRequest } from "../types";
 
 // Configuration
 const PUSH_COUNT = Number(process.env.BENCH_PUSH_COUNT) || 10;

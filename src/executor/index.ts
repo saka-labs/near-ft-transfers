@@ -1,6 +1,6 @@
-import type { Queue } from "./queue";
-import type { QueueItem } from "./types";
-import { sleep } from "./utils";
+import type { Queue } from "../queue";
+import type { QueueItem } from "../types";
+import { sleep } from "../utils";
 
 export class Executor {
   private queue: Queue;

@@ -18,10 +18,10 @@ bun run index.ts
 
 ```bash
 # Run queue tests
-bun test src/queue.test.ts
+bun test src/queue/queue.test.ts
 
 # Run queue benchmark
-bun run src/queue.bench.ts
+bun run src/queue/queue.bench.ts
 
 # Test transfer endpoint
 ./test-transfer.sh

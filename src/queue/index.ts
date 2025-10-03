@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { TransferRequest, QueueItem } from "./types";
-import { QueueStatus } from "./types";
+import type { TransferRequest, QueueItem } from "../types";
+import { QueueStatus } from "../types";
 
 export class Queue {
   private db: Database;

@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Queue } from "./queue";
-import { QueueStatus } from "./types";
-import type { TransferRequest } from "./types";
+import { Queue } from ".";
+import { QueueStatus } from "../types";
+import type { TransferRequest } from "../types";
 
 describe("Queue", () => {
   let db: Database;
