@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun run src/index.ts --watch"
+    "dev": "bun run src/index.ts --watch",
+    "sandbox": "TMPDIR=.tmp bun run tests/sandbox.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "hono": "^4.9.9",
+    "near-sandbox": "^0.2.0",
     "zod": "^4.1.11"
   }
 }
