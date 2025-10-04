@@ -9,6 +9,7 @@
         "@near-js/providers": "^2.3.3",
         "@near-js/signers": "^2.3.3",
         "@near-js/tokens": "^2.3.3",
+        "@near-js/transactions": "^2.3.3",
         "hono": "^4.9.9",
         "near-sandbox": "^0.2.0",
         "zod": "^4.1.11",

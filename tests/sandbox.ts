@@ -5,6 +5,7 @@ import { KeyPairSigner } from "@near-js/signers";
 import { NEAR } from "@near-js/tokens";
 import { DEFAULT_ACCOUNT_ID, DEFAULT_PRIVATE_KEY, Sandbox } from "near-sandbox";
 import { readFile } from "fs/promises";
+import { actionCreators } from "@near-js/transactions";
 
 (async () => {
   const sandbox = await Sandbox.start({
@@ -47,12 +48,6 @@ import { readFile } from "fs/promises";
       NEAR.toUnits(10),
     );
 
-    const accountB = new Account(
-      "account-b." + DEFAULT_ACCOUNT_ID,
-      new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
-      new KeyPairSigner(accountBKeyPair),
-    );
-
     // Deploy FT contract
     const ftContract = await readFile(`${__dirname}/fungible_token.wasm`);
     await accountA.deployContract(ftContract);
@@ -76,16 +71,23 @@ import { readFile } from "fs/promises";
       deposit: NEAR.toUnits(0.00125), // 0.00125 NEAR
     });
 
-    // Transfer 100 tokens from account-a to account-b
-    await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_transfer",
-      args: {
+    // Batch transfers
+    const action = actionCreators.functionCall(
+      "ft_transfer",
+      {
         receiver_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
-        amount: "100",
+        amount: "1",
         memo: null,
       },
-      deposit: 1,
+      1000000000000n * 3n, // Gas:  3 TGas
+      1n, // Attached deposit: 1 yoctoNEAR
+    );
+
+    await accountA.signAndSendTransaction({
+      receiverId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      actions: Array(100)
+        .fill(null)
+        .map(() => action),
     });
 
     // Get the balance of account-b

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run src/index.ts --watch",
-    "sandbox": "TMPDIR=.tmp bun run tests/sandbox.ts"
+    "sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun run tests/sandbox.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -20,6 +20,7 @@
     "@near-js/providers": "^2.3.3",
     "@near-js/signers": "^2.3.3",
     "@near-js/tokens": "^2.3.3",
+    "@near-js/transactions": "^2.3.3",
     "hono": "^4.9.9",
     "near-sandbox": "^0.2.0",
     "zod": "^4.1.11"
