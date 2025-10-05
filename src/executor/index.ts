@@ -1,11 +1,12 @@
 import { Account } from "@near-js/accounts";
 import type { Queue } from "../queue";
 import type { QueueItem } from "../types";
-import { JsonRpcProvider, type Provider } from "@near-js/providers";
+import { JsonRpcProvider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { actionCreators } from "@near-js/transactions";
 import { sleep } from "bun";
+import { sha256Bs58 } from "../utils";
 
 export type ExecutorOptions = {
   rpcUrl: string;
@@ -25,10 +26,16 @@ export class Executor {
   private options: ExecutorOptions;
 
   private account: Account;
+  private jsonRpcProvider: JsonRpcProvider;
 
   constructor(
     queue: Queue,
-    { batchSize = 100, interval = 500, minQueueToProcess = 1, ...options }: ExecutorOptions,
+    {
+      batchSize = 100,
+      interval = 500,
+      minQueueToProcess = 1,
+      ...options
+    }: ExecutorOptions,
   ) {
     if (batchSize < 1 || batchSize > 100) {
       throw new Error("batchSize must be between 1 and 100");
@@ -42,9 +49,10 @@ export class Executor {
       minQueueToProcess,
     };
 
+    this.jsonRpcProvider = new JsonRpcProvider({ url: this.options.rpcUrl });
     this.account = new Account(
       this.options.accountId,
-      new JsonRpcProvider({ url: this.options.rpcUrl }) as Provider,
+      this.jsonRpcProvider,
       new KeyPairSigner(
         KeyPair.fromString(this.options.privateKey as KeyPairString),
       ),
@@ -84,7 +92,10 @@ export class Executor {
         const processTime = Date.now() - startTime;
 
         // Check if queue is idle and notify waiters
-        if (!this.queue.hasPendingOrProcessing() && this.idleResolvers.length > 0) {
+        if (
+          !this.queue.hasPendingOrProcessing() &&
+          this.idleResolvers.length > 0
+        ) {
           const resolvers = [...this.idleResolvers];
           this.idleResolvers = [];
           resolvers.forEach((resolve) => resolve());
@@ -101,24 +112,33 @@ export class Executor {
   }
 
   private async processBatch(items: QueueItem[]) {
+    const itemIds = items.map((item) => item.id);
+
     try {
       console.log(`Processing batch of ${items.length} items...`);
 
-      const result = await this.account.signAndSendTransaction({
-        receiverId: this.options.contractId,
-        actions: items.map((item) =>
-          this.createAction(item.receiver_account_id, item.amount),
-        ),
-      });
-      console.log("Transaction result:", result.status);
+      const actions = items.map((item) =>
+        this.createAction(item.receiver_account_id, item.amount),
+      );
 
-      // Extract transaction hash from result
+      const signed = await this.account.createSignedTransaction(
+        this.options.contractId,
+        actions,
+      );
+      const signedHash = await sha256Bs58(signed.transaction.encode());
+
+      console.log("Signed hash:", signedHash);
+      this.queue.markBatchProcessing(itemIds, signedHash);
+
+      const result = await this.jsonRpcProvider.sendTransaction(signed);
+
+      // signedHash and txHash should be exactly the same, just to be sure
       const txHash = result.transaction.hash;
       console.log("Transaction hash:", txHash);
 
-      this.queue.markBatchSuccess(items.map(item => item.id), txHash);
+      this.queue.markBatchSuccess(itemIds, txHash);
     } catch (error) {
-      this.queue.markBatchFailed(items.map(item => item.id), String(error));
+      this.queue.markBatchFailed(itemIds, String(error));
     }
   }
 

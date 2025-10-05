@@ -129,6 +129,24 @@ export class Queue extends EventEmitter {
     return items;
   }
 
+  markProcessing(id: number, txHash: string) {
+    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?", [
+      QueueStatus.PROCESSING,
+      txHash,
+      Date.now(),
+      id,
+    ]);
+  }
+
+  markBatchProcessing(ids: number[], txHash: string) {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      [QueueStatus.PROCESSING, txHash, Date.now(), ...ids],
+    );
+  }
+
   markSuccess(id: number, txHash: string) {
     const item = this.getById(id);
     this.db.run("UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?", [
