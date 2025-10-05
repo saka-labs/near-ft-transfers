@@ -45,7 +45,8 @@ export class Queue extends EventEmitter {
         updated_at INTEGER NOT NULL,
         retry_count INTEGER DEFAULT 0,
         error_message TEXT,
-        batch_id INTEGER
+        batch_id INTEGER,
+        is_stalled INTEGER DEFAULT 0
       )
     `);
     // Index for efficient lookup by batch_id
@@ -66,8 +67,12 @@ export class Queue extends EventEmitter {
         updated_at INTEGER NOT NULL
       )
     `);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tx_status ON batch_transactions(status)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tx_hash ON batch_transactions(tx_hash)`);
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_batch_tx_status ON batch_transactions(status)`,
+    );
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_batch_tx_hash ON batch_transactions(tx_hash)`,
+    );
   }
 
   push(transfer: TransferRequest): number {
@@ -81,9 +86,9 @@ export class Queue extends EventEmitter {
             "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND batch_id IS NULL LIMIT 1",
           )
           .get(transfer.receiver_account_id) as {
-            id: number;
-            amount: string;
-          } | null;
+          id: number;
+          amount: string;
+        } | null;
 
         if (existing) {
           // Add amounts together (both are string numbers)
@@ -101,35 +106,38 @@ export class Queue extends EventEmitter {
       // Create new entry (either merging is disabled or no existing entry found)
       this.db.run(
         "INSERT INTO queue (receiver_account_id, amount, created_at, updated_at) VALUES (?, ?, ?, ?)",
-        [
-          transfer.receiver_account_id,
-          transfer.amount,
-          now,
-          now,
-        ],
+        [transfer.receiver_account_id, transfer.amount, now, now],
       );
-      return this.db.query("SELECT last_insert_rowid() as id").get() as { id: number };
+      return this.db.query("SELECT last_insert_rowid() as id").get() as {
+        id: number;
+      };
     });
 
     const result = tx();
-    const id = typeof result === 'number' ? result : result.id;
-    this.emit('pushed', id, transfer);
+    const id = typeof result === "number" ? result : result.id;
+    this.emit("pushed", id, transfer);
     return id;
   }
 
   pull(limit: number = 10): QueueItem[] {
-    // Get pending items (batch_id is NULL means pending)
+    // Get pending items (batch_id is NULL means pending, exclude stalled items)
     const items = this.db
-      .query("SELECT * FROM queue WHERE batch_id IS NULL ORDER BY id ASC LIMIT ?")
+      .query(
+        "SELECT * FROM queue WHERE batch_id IS NULL AND is_stalled = 0 ORDER BY id ASC LIMIT ?",
+      )
       .all(limit) as QueueItem[];
 
     if (items.length > 0) {
-      this.emit('pulled', items);
+      this.emit("pulled", items);
     }
     return items;
   }
 
-  createSignedTransaction(txHash: string, signedTx: Uint8Array, queueIds: number[]): number {
+  createSignedTransaction(
+    txHash: string,
+    signedTx: Uint8Array,
+    queueIds: number[],
+  ): number {
     const now = Date.now();
 
     const tx = this.db.transaction(() => {
@@ -138,7 +146,9 @@ export class Queue extends EventEmitter {
         "INSERT INTO batch_transactions (tx_hash, signed_tx, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
         [txHash, signedTx, QueueStatus.PROCESSING, now, now],
       );
-      const result = this.db.query("SELECT last_insert_rowid() as id").get() as { id: number };
+      const result = this.db
+        .query("SELECT last_insert_rowid() as id")
+        .get() as { id: number };
       const batchId = result.id;
 
       // Associate queue items with this batch
@@ -169,7 +179,15 @@ export class Queue extends EventEmitter {
     });
 
     tx();
-    items.forEach(item => this.emit('success', item, txHash));
+    items.forEach((item) => this.emit("success", item, txHash));
+  }
+
+  markItemStalled(itemId: number, errorMessage: string) {
+    const now = Date.now();
+    this.db.run(
+      "UPDATE queue SET is_stalled = 1, error_message = ?, updated_at = ? WHERE id = ?",
+      [errorMessage, now, itemId],
+    );
   }
 
   recoverFailedBatch(batchId: number, errorMessage?: string) {
@@ -182,15 +200,24 @@ export class Queue extends EventEmitter {
       // Delete the failed batch transaction record
       this.db.run("DELETE FROM batch_transactions WHERE id = ?", [batchId]);
 
-      // Reset queue items to pending by clearing batch_id, incrementing retry_count, and storing error_message
+      if (errorMessage) {
+        this.db.run(
+          "UPDATE queue SET error_message = ?, updated_at = ? WHERE batch_id = ?",
+          [errorMessage, now, batchId],
+        );
+      }
+
+      // Reset queue items to pending by clearing batch_id and incrementing retry_count
       this.db.run(
-        "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE batch_id = ?",
-        [errorMessage || null, now, batchId],
+        "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, updated_at = ? WHERE batch_id = ?",
+        [now, batchId],
       );
     });
 
     tx();
-    items.forEach(item => this.emit('failed', item, errorMessage || 'Batch processing failed'));
+    items.forEach((item) =>
+      this.emit("failed", item, errorMessage || "Batch processing failed"),
+    );
   }
 
   getById(id: number): QueueItem | null {
@@ -219,10 +246,10 @@ export class Queue extends EventEmitter {
         "SELECT id, tx_hash, signed_tx FROM batch_transactions WHERE status = ? AND signed_tx IS NOT NULL",
       )
       .all(QueueStatus.PROCESSING) as Array<{
-        id: number;
-        tx_hash: string;
-        signed_tx: Uint8Array;
-      }>;
+      id: number;
+      tx_hash: string;
+      signed_tx: Uint8Array;
+    }>;
 
     // For each batch transaction, get the associated queue item IDs
     return batchTxs.map((tx) => {
@@ -248,14 +275,18 @@ export class Queue extends EventEmitter {
       );
 
       // Delete all non-successful batch transactions (we'll recreate them on retry)
-      this.db.run("DELETE FROM batch_transactions WHERE status != ?", [QueueStatus.SUCCESS]);
+      this.db.run("DELETE FROM batch_transactions WHERE status != ?", [
+        QueueStatus.SUCCESS,
+      ]);
     });
 
     tx();
   }
 
   getStats(): QueueStats {
-    const stats = this.db.query(`
+    const stats = this.db
+      .query(
+        `
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN q.batch_id IS NULL THEN 1 ELSE 0 END) as pending,
@@ -264,22 +295,28 @@ export class Queue extends EventEmitter {
         SUM(CASE WHEN bt.status = ? THEN 1 ELSE 0 END) as failed
       FROM queue q
       LEFT JOIN batch_transactions bt ON q.batch_id = bt.id
-    `).get(
-      QueueStatus.PROCESSING,
-      QueueStatus.SUCCESS,
-      QueueStatus.FAILED
-    ) as QueueStats;
+    `,
+      )
+      .get(
+        QueueStatus.PROCESSING,
+        QueueStatus.SUCCESS,
+        QueueStatus.FAILED,
+      ) as QueueStats;
 
     return stats;
   }
 
   hasPendingOrProcessing(): boolean {
-    const result = this.db.query(`
+    const result = this.db
+      .query(
+        `
       SELECT COUNT(*) as count
       FROM queue q
       LEFT JOIN batch_transactions bt ON q.batch_id = bt.id
       WHERE q.batch_id IS NULL OR bt.status = ?
-    `).get(QueueStatus.PROCESSING) as { count: number };
+    `,
+      )
+      .get(QueueStatus.PROCESSING) as { count: number };
 
     return result.count > 0;
   }

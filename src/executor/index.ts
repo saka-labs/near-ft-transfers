@@ -1,12 +1,13 @@
 import { Account } from "@near-js/accounts";
 import type { Queue } from "../queue";
-import type { QueueItem } from "../types";
+import type { QueueItem, TransactionStatus } from "../types";
 import { JsonRpcProvider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { actionCreators, SignedTransaction } from "@near-js/transactions";
 import { sleep } from "bun";
 import { sha256Bs58 } from "../utils";
+import { EventEmitter } from "events";
 
 export type ExecutorOptions = {
   rpcUrl: string;
@@ -18,7 +19,19 @@ export type ExecutorOptions = {
   minQueueToProcess?: number;
 };
 
-export class Executor {
+export type ExecutorEvents = {
+  batchProcessed: (itemCount: number, success: boolean) => void;
+  batchFailed: (itemCount: number, error: string) => void;
+  loopCompleted: () => void;
+};
+
+export interface Executor {
+  on<K extends keyof ExecutorEvents>(event: K, listener: ExecutorEvents[K]): this;
+  once<K extends keyof ExecutorEvents>(event: K, listener: ExecutorEvents[K]): this;
+  emit<K extends keyof ExecutorEvents>(event: K, ...args: Parameters<ExecutorEvents[K]>): boolean;
+}
+
+export class Executor extends EventEmitter {
   private queue: Queue;
   private isRunning = false;
   private idleResolvers: (() => void)[] = [];
@@ -37,6 +50,8 @@ export class Executor {
       ...options
     }: ExecutorOptions,
   ) {
+    super();
+
     if (batchSize < 1 || batchSize > 100) {
       throw new Error("batchSize must be between 1 and 100");
     }
@@ -98,7 +113,10 @@ export class Executor {
           `Failed to re-broadcast transaction ${tx.tx_hash}:`,
           error,
         );
-        this.queue.recoverFailedBatch(tx.id, error instanceof Error ? error.message : String(error));
+        this.queue.recoverFailedBatch(
+          tx.id,
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
 
@@ -130,6 +148,9 @@ export class Executor {
           await this.processBatch(items);
         }
         const processTime = Date.now() - startTime;
+
+        // Emit loop completed event
+        this.emit('loopCompleted');
 
         // Check if queue is idle and notify waiters
         if (
@@ -176,18 +197,51 @@ export class Executor {
       );
 
       const result = await this.jsonRpcProvider.sendTransaction(signed);
+      const status = result.status as TransactionStatus;
+      if (status.Failure) {
+        if (status.Failure.ActionError) {
+          const actionIndex = status.Failure.ActionError.index;
+          const kind = status.Failure.ActionError.kind;
+          const errorMessage = JSON.stringify(kind);
+          console.log({ kind, errorMessage });
+
+          if (actionIndex !== undefined) {
+            const item = items[actionIndex]!;
+
+            // Mark the specific item as stalled
+            this.queue.markItemStalled(item.id, errorMessage);
+
+            this.queue.recoverFailedBatch(batchId);
+          } else {
+            this.queue.recoverFailedBatch(batchId, errorMessage);
+          }
+
+          this.emit('batchFailed', items.length, errorMessage);
+          return;
+        }
+
+        if (status.Failure.InvalidTxError) {
+          const errorMessage = JSON.stringify(status.Failure.InvalidTxError);
+          this.queue.recoverFailedBatch(batchId, errorMessage);
+          this.emit('batchFailed', items.length, errorMessage);
+          return;
+        }
+      }
 
       // signedHash and txHash should be exactly the same, just to be sure
       const txHash = result.transaction.hash;
       console.log("Transaction hash:", txHash);
 
       this.queue.markBatchSuccess(batchId, txHash);
+      this.emit('batchProcessed', items.length, true);
     } catch (error) {
       console.error("Failed to process batch:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       if (batchId) {
         // Recovery mechanism will reset items to pending
-        this.queue.recoverFailedBatch(batchId, error instanceof Error ? error.message : String(error));
+        this.queue.recoverFailedBatch(batchId, errorMessage);
       }
+      this.emit('batchFailed', items.length, errorMessage);
     }
   }
 
