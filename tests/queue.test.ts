@@ -155,9 +155,10 @@ describe("Queue", () => {
       expect(batchId).toBeGreaterThan(0);
 
       // Verify batch_id is set on queue items
-      const updatedItems = queue.getByIds(items.map(i => i.id));
-      expect(updatedItems[0]!.batch_id).toBe(batchId);
-      expect(updatedItems[1]!.batch_id).toBe(batchId);
+      const updatedItem1 = queue.getById(items[0]!.id);
+      const updatedItem2 = queue.getById(items[1]!.id);
+      expect(updatedItem1!.batch_id).toBe(batchId);
+      expect(updatedItem2!.batch_id).toBe(batchId);
 
       // Verify batch transaction record
       const batchTx = db.query("SELECT * FROM batch_transactions WHERE id = ?").get(batchId) as any;
@@ -193,17 +194,18 @@ describe("Queue", () => {
       expect(batchTx).toBeNull();
 
       // Verify queue items are reset to pending
-      const updatedItems = queue.getByIds(items.map(i => i.id));
-      expect(updatedItems[0]!.batch_id).toBeNull();
-      expect(updatedItems[1]!.batch_id).toBeNull();
+      const updatedItem1 = queue.getById(items[0]!.id);
+      const updatedItem2 = queue.getById(items[1]!.id);
+      expect(updatedItem1!.batch_id).toBeNull();
+      expect(updatedItem2!.batch_id).toBeNull();
 
       // Verify retry_count is incremented
-      expect(updatedItems[0]!.retry_count).toBe(1);
-      expect(updatedItems[1]!.retry_count).toBe(1);
+      expect(updatedItem1!.retry_count).toBe(1);
+      expect(updatedItem2!.retry_count).toBe(1);
 
       // Verify error_message is stored
-      expect(updatedItems[0]!.error_message).toBe("Network error");
-      expect(updatedItems[1]!.error_message).toBe("Network error");
+      expect(updatedItem1!.error_message).toBe("Network error");
+      expect(updatedItem2!.error_message).toBe("Network error");
 
       // Items should be pullable again
       const retriedItems = queue.pull(10);
@@ -218,7 +220,7 @@ describe("Queue", () => {
       const signedTx = new Uint8Array([1, 2, 3, 4, 5]);
       const batchId = queue.createSignedTransaction("txhash123", signedTx, items.map(i => i.id));
 
-      const pending = queue.getPendingSignedTransactions();
+      const pending = queue.getPendingBatchTransactions();
       expect(pending).toHaveLength(1);
       expect(pending[0]!.id).toBe(batchId);
       expect(pending[0]!.tx_hash).toBe("txhash123");
@@ -240,8 +242,8 @@ describe("Queue", () => {
       expect(batchTx).toBeNull();
 
       // Verify items are reset to pending
-      const updatedItems = queue.getByIds(items.map(i => i.id));
-      expect(updatedItems[0]!.batch_id).toBeNull();
+      const updatedItem = queue.getById(items[0]!.id);
+      expect(updatedItem!.batch_id).toBeNull();
 
       // Items should be pullable again
       const retriedItems = queue.pull(10);

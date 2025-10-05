@@ -15,13 +15,6 @@ export type QueueStats = {
   total: number;
 };
 
-export type QueueEvents = {
-  pushed: (id: number, transfer: TransferRequest) => void;
-  pulled: (items: QueueItem[]) => void;
-  success: (item: QueueItem, txHash: string) => void;
-  failed: (item: QueueItem, error: string) => void;
-};
-
 export class Queue extends EventEmitter {
   private db: Database;
   private options: QueueOptions;
@@ -232,15 +225,7 @@ export class Queue extends EventEmitter {
       .get(batchId) as { status: string; tx_hash: string } | null;
   }
 
-  getByIds(ids: number[]): QueueItem[] {
-    if (ids.length === 0) return [];
-    const placeholders = ids.map(() => "?").join(",");
-    return this.db
-      .query(`SELECT * FROM queue WHERE id IN (${placeholders})`)
-      .all(...ids) as QueueItem[];
-  }
-
-  getPendingSignedTransactions(): Array<{
+  getPendingBatchTransactions(): Array<{
     id: number;
     tx_hash: string;
     signed_tx: Uint8Array;

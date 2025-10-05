@@ -83,39 +83,45 @@ export class Executor extends EventEmitter {
   }
 
   private async recoverProcessingTransactions() {
-    const processingTxs = this.queue.getPendingSignedTransactions();
+    const batchTxs = this.queue.getPendingBatchTransactions();
 
-    if (processingTxs.length === 0) {
-      console.info("No pending signed transactions to recover");
+    if (batchTxs.length === 0) {
+      console.info("No pending batch transactions to recover");
       return;
     }
 
     console.info(
-      `Recovering ${processingTxs.length} processing signed transactions...`,
+      `Recovering ${batchTxs.length} batch transactions...`,
     );
 
-    for (const tx of processingTxs) {
+    for (const batch of batchTxs) {
       try {
         console.info(
-          `Re-broadcasting transaction ${tx.tx_hash} for queue items [${tx.queue_ids.join(", ")}]`,
+          `Re-broadcasting transaction ${batch.tx_hash} for queue items [${batch.queue_ids.join(", ")}]`,
         );
 
         // Decode the signed transaction and re-broadcast it
         const result = await this.jsonRpcProvider.sendTransaction(
-          SignedTransaction.decode(tx.signed_tx),
+          SignedTransaction.decode(batch.signed_tx),
         );
-        const txHash = result.transaction.hash;
 
+        // Validate transaction result
+        const validation = this.validateTransactionResult(result, batch.id);
+        if (!validation.isValid) {
+          console.error(
+            `Re-broadcast transaction ${batch.tx_hash} failed validation: ${validation.errorMessage}`,
+          );
+          continue;
+        }
+
+        const txHash = result.transaction.hash;
         console.info(`Successfully re-broadcast transaction: ${txHash}`);
-        this.queue.markBatchSuccess(tx.id, txHash);
+        this.queue.markBatchSuccess(batch.id, txHash);
       } catch (error) {
-        console.error(
-          `Failed to re-broadcast transaction ${tx.tx_hash}:`,
+        this.handleBroadcastError(
           error,
-        );
-        this.queue.recoverFailedBatch(
-          tx.id,
-          error instanceof Error ? error.message : String(error),
+          batch.id,
+          `Failed to re-broadcast transaction ${batch.tx_hash}`,
         );
       }
     }
@@ -197,35 +203,12 @@ export class Executor extends EventEmitter {
       );
 
       const result = await this.jsonRpcProvider.sendTransaction(signed);
-      const status = result.status as TransactionStatus;
-      if (status.Failure) {
-        if (status.Failure.ActionError) {
-          const actionIndex = status.Failure.ActionError.index;
-          const kind = status.Failure.ActionError.kind;
-          const errorMessage = JSON.stringify(kind);
-          console.info({ kind, errorMessage });
 
-          if (actionIndex !== undefined) {
-            const item = items[actionIndex]!;
-
-            // Mark the specific item as stalled
-            this.queue.markItemStalled(item.id, errorMessage);
-
-            this.queue.recoverFailedBatch(batchId);
-          } else {
-            this.queue.recoverFailedBatch(batchId, errorMessage);
-          }
-
-          this.emit('batchFailed', items.length, errorMessage);
-          return;
-        }
-
-        if (status.Failure.InvalidTxError) {
-          const errorMessage = JSON.stringify(status.Failure.InvalidTxError);
-          this.queue.recoverFailedBatch(batchId, errorMessage);
-          this.emit('batchFailed', items.length, errorMessage);
-          return;
-        }
+      // Validate transaction result
+      const validation = this.validateTransactionResult(result, batchId, items);
+      if (!validation.isValid) {
+        this.emit('batchFailed', items.length, validation.errorMessage!);
+        return;
       }
 
       // signedHash and txHash should be exactly the same, just to be sure
@@ -235,14 +218,62 @@ export class Executor extends EventEmitter {
       this.queue.markBatchSuccess(batchId, txHash);
       this.emit('batchProcessed', items.length, true);
     } catch (error) {
-      console.error("Failed to process batch:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (batchId) {
-        // Recovery mechanism will reset items to pending
-        this.queue.recoverFailedBatch(batchId, errorMessage);
-      }
+      const errorMessage = this.handleBroadcastError(error, batchId, "Failed to process batch");
       this.emit('batchFailed', items.length, errorMessage);
     }
+  }
+
+  private validateTransactionResult(
+    result: any,
+    batchId: number,
+    items?: QueueItem[],
+  ): { isValid: boolean; errorMessage?: string } {
+    const status = result.status as TransactionStatus;
+
+    if (!status.Failure) {
+      return { isValid: true };
+    }
+
+    if (status.Failure.ActionError) {
+      const actionIndex = status.Failure.ActionError.index;
+      const kind = status.Failure.ActionError.kind;
+      const errorMessage = JSON.stringify(kind);
+      console.info({ kind, errorMessage });
+
+      if (actionIndex !== undefined && items) {
+        const item = items[actionIndex]!;
+        // Mark the specific item as stalled
+        this.queue.markItemStalled(item.id, errorMessage);
+        this.queue.recoverFailedBatch(batchId);
+      } else {
+        this.queue.recoverFailedBatch(batchId, errorMessage);
+      }
+
+      return { isValid: false, errorMessage };
+    }
+
+    if (status.Failure.InvalidTxError) {
+      const errorMessage = JSON.stringify(status.Failure.InvalidTxError);
+      this.queue.recoverFailedBatch(batchId, errorMessage);
+      return { isValid: false, errorMessage };
+    }
+
+    return { isValid: true };
+  }
+
+  private handleBroadcastError(
+    error: unknown,
+    batchId: number | undefined,
+    context: string,
+  ): string {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`${context}:`, error);
+
+    if (batchId) {
+      this.queue.recoverFailedBatch(batchId, errorMessage);
+    }
+
+    return errorMessage;
   }
 
   private createAction(receiverId: string, amount: string) {

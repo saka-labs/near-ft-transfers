@@ -102,7 +102,10 @@ afterAll(async () => {
 });
 
 describe("Executor - Benchmark", () => {
-  test("should process 1000 queue items and report processing time", async () => {
+  test("should process 10000 queue items and report processing time", async () => {
+    const TRANSFER_COUNT = 10_000;
+    const AMOUNT_PER_TRANSFER = "100";
+
     const db = new Database(":memory:");
     const queue = new Queue(db, { mergeExistingAccounts: false });
 
@@ -122,20 +125,20 @@ describe("Executor - Benchmark", () => {
     });
 
     console.info(`\nInitial balance: ${initialBalance}`);
-    console.info("Pushing 1000 items to queue...");
+    console.info(`Pushing ${TRANSFER_COUNT} items to queue...`);
 
-    // Push 1000 transfers
+    // Push transfers
     const pushStartTime = Date.now();
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < TRANSFER_COUNT; i++) {
       queue.push({
         receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
-        amount: "100",
+        amount: AMOUNT_PER_TRANSFER,
       });
     }
     const pushEndTime = Date.now();
     const pushTime = pushEndTime - pushStartTime;
 
-    console.info(`Pushed 1000 items in ${pushTime}ms`);
+    console.info(`Pushed ${TRANSFER_COUNT} items in ${pushTime}ms`);
     console.info("Starting executor...");
 
     const processingStartTime = Date.now();
@@ -168,17 +171,17 @@ describe("Executor - Benchmark", () => {
     console.info("=============================\n");
 
     // Verify results
-    expect(stats.success).toBe(1000);
+    expect(stats.success).toBe(TRANSFER_COUNT);
     expect(stats.failed).toBe(0);
     expect(stats.pending).toBe(0);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 100000n
+      BigInt(initialBalance.toString()) + BigInt(TRANSFER_COUNT) * BigInt(AMOUNT_PER_TRANSFER)
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
     // Performance assertion - should complete in reasonable time
     // This is a soft limit, adjust based on your environment
-    expect(processingTime).toBeLessThan(120000); // 2 minutes max
-  }, 180000); // 3 minute timeout
+    expect(processingTime).toBeLessThan(1200000); // 20 minutes max
+  }, 1800000); // 30 minute timeout
 });
