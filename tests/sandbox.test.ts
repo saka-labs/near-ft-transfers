@@ -32,7 +32,7 @@ beforeAll(async () => {
     },
   });
 
-  console.log(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
+  console.info(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
   const provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
   const keyPair = KeyPair.fromString(DEFAULT_PRIVATE_KEY);
 
@@ -121,13 +121,13 @@ beforeAll(async () => {
     deposit: NEAR.toUnits(0.00125),
   });
 
-  console.log("Sandbox setup completed");
+  console.info("Sandbox setup completed");
 });
 
 afterAll(async () => {
-  console.log("Tearing down the sandbox...");
+  console.info("Tearing down the sandbox...");
   await sandbox.tearDown();
-  console.log("Sandbox is stopped");
+  console.info("Sandbox is stopped");
 });
 
 describe("Executor - Basic Batch Processing", () => {

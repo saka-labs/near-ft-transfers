@@ -25,8 +25,8 @@ console.time(`Pull ${PULL_COUNT} items`);
 const pulled = queue.pull(PULL_COUNT);
 console.timeEnd(`Pull ${PULL_COUNT} items`);
 
-console.log(`Pulled ${pulled.length} items`);
+console.info(`Pulled ${pulled.length} items`);
 
 // Verify data
-console.log("\nFirst item:", pulled[0]);
-console.log("Last item:", pulled[pulled.length - 1]);
+console.info("\nFirst item:", pulled[0]);
+console.info("Last item:", pulled[pulled.length - 1]);

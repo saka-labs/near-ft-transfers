@@ -86,17 +86,17 @@ export class Executor extends EventEmitter {
     const processingTxs = this.queue.getPendingSignedTransactions();
 
     if (processingTxs.length === 0) {
-      console.log("No pending signed transactions to recover");
+      console.info("No pending signed transactions to recover");
       return;
     }
 
-    console.log(
+    console.info(
       `Recovering ${processingTxs.length} processing signed transactions...`,
     );
 
     for (const tx of processingTxs) {
       try {
-        console.log(
+        console.info(
           `Re-broadcasting transaction ${tx.tx_hash} for queue items [${tx.queue_ids.join(", ")}]`,
         );
 
@@ -106,7 +106,7 @@ export class Executor extends EventEmitter {
         );
         const txHash = result.transaction.hash;
 
-        console.log(`Successfully re-broadcast transaction: ${txHash}`);
+        console.info(`Successfully re-broadcast transaction: ${txHash}`);
         this.queue.markBatchSuccess(tx.id, txHash);
       } catch (error) {
         console.error(
@@ -120,7 +120,7 @@ export class Executor extends EventEmitter {
       }
     }
 
-    console.log("Recovery complete");
+    console.info("Recovery complete");
   }
 
   stop() {
@@ -177,7 +177,7 @@ export class Executor extends EventEmitter {
     let batchId;
 
     try {
-      console.log(`Processing batch of ${items.length} items...`);
+      console.info(`Processing batch of ${items.length} items...`);
 
       const actions = items.map((item) =>
         this.createAction(item.receiver_account_id, item.amount),
@@ -203,7 +203,7 @@ export class Executor extends EventEmitter {
           const actionIndex = status.Failure.ActionError.index;
           const kind = status.Failure.ActionError.kind;
           const errorMessage = JSON.stringify(kind);
-          console.log({ kind, errorMessage });
+          console.info({ kind, errorMessage });
 
           if (actionIndex !== undefined) {
             const item = items[actionIndex]!;
@@ -230,7 +230,7 @@ export class Executor extends EventEmitter {
 
       // signedHash and txHash should be exactly the same, just to be sure
       const txHash = result.transaction.hash;
-      console.log("Transaction hash:", txHash);
+      console.info("Transaction hash:", txHash);
 
       this.queue.markBatchSuccess(batchId, txHash);
       this.emit('batchProcessed', items.length, true);

@@ -28,7 +28,7 @@ beforeAll(async () => {
     },
   });
 
-  console.log(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
+  console.info(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
   const provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
   const keyPair = KeyPair.fromString(DEFAULT_PRIVATE_KEY);
 
@@ -92,13 +92,13 @@ beforeAll(async () => {
     deposit: NEAR.toUnits(0.00125),
   });
 
-  console.log("Sandbox setup completed");
+  console.info("Sandbox setup completed");
 });
 
 afterAll(async () => {
-  console.log("Tearing down the sandbox...");
+  console.info("Tearing down the sandbox...");
   await sandbox.tearDown();
-  console.log("Sandbox is stopped");
+  console.info("Sandbox is stopped");
 });
 
 describe("Executor - Benchmark", () => {
@@ -121,8 +121,8 @@ describe("Executor - Benchmark", () => {
       args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     });
 
-    console.log(`\nInitial balance: ${initialBalance}`);
-    console.log("Pushing 1000 items to queue...");
+    console.info(`\nInitial balance: ${initialBalance}`);
+    console.info("Pushing 1000 items to queue...");
 
     // Push 1000 transfers
     const pushStartTime = Date.now();
@@ -135,8 +135,8 @@ describe("Executor - Benchmark", () => {
     const pushEndTime = Date.now();
     const pushTime = pushEndTime - pushStartTime;
 
-    console.log(`Pushed 1000 items in ${pushTime}ms`);
-    console.log("Starting executor...");
+    console.info(`Pushed 1000 items in ${pushTime}ms`);
+    console.info("Starting executor...");
 
     const processingStartTime = Date.now();
     await executor.start();
@@ -155,17 +155,17 @@ describe("Executor - Benchmark", () => {
     const stats = queue.getStats();
 
     // Report results
-    console.log("\n===== BENCHMARK RESULTS =====");
-    console.log(`Queue push time: ${pushTime}ms`);
-    console.log(`Processing time: ${processingTime}ms`);
-    console.log(`Total time: ${pushTime + processingTime}ms`);
-    console.log(`Items processed: ${stats.success}`);
-    console.log(`Items failed: ${stats.failed}`);
-    console.log(`Average time per item: ${(processingTime / stats.success).toFixed(2)}ms`);
-    console.log(`Throughput: ${(stats.success / (processingTime / 1000)).toFixed(2)} items/sec`);
-    console.log(`Initial balance: ${initialBalance}`);
-    console.log(`Final balance: ${finalBalance}`);
-    console.log("=============================\n");
+    console.info("\n===== BENCHMARK RESULTS =====");
+    console.info(`Queue push time: ${pushTime}ms`);
+    console.info(`Processing time: ${processingTime}ms`);
+    console.info(`Total time: ${pushTime + processingTime}ms`);
+    console.info(`Items processed: ${stats.success}`);
+    console.info(`Items failed: ${stats.failed}`);
+    console.info(`Average time per item: ${(processingTime / stats.success).toFixed(2)}ms`);
+    console.info(`Throughput: ${(stats.success / (processingTime / 1000)).toFixed(2)} items/sec`);
+    console.info(`Initial balance: ${initialBalance}`);
+    console.info(`Final balance: ${finalBalance}`);
+    console.info("=============================\n");
 
     // Verify results
     expect(stats.success).toBe(1000);
