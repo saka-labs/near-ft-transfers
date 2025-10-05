@@ -145,7 +145,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       const items = queue.pull(10);
 
-      queue.markSuccess(items[0]!.id);
+      queue.markSuccess(items[0]!.id, "tx-hash");
 
       const result = db
         .query("SELECT * FROM queue WHERE id = ?")
@@ -162,7 +162,7 @@ describe("Queue", () => {
       const start = Date.now();
       while (Date.now() - start < 5) {} // 5ms wait
 
-      queue.markSuccess(items[0]!.id);
+      queue.markSuccess(items[0]!.id, "tx-hash");
 
       const result = db
         .query("SELECT * FROM queue WHERE id = ?")
@@ -238,7 +238,7 @@ describe("Queue", () => {
     test("should create new entry when existing transfer is marked as success", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       const items = queue.pull(1);
-      queue.markSuccess(items[0]!.id);
+      queue.markSuccess(items[0]!.id, "tx-hash");
 
       queue.push({ receiver_account_id: "alice.testnet", amount: "2000000" });
 
