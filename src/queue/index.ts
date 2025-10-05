@@ -193,6 +193,15 @@ export class Queue extends EventEmitter {
     items.forEach(item => this.emit('failed', item, error));
   }
 
+  markBatchPending(ids: number[]) {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE queue SET status = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      [QueueStatus.PENDING, Date.now(), ...ids],
+    );
+  }
+
   getById(id: number): QueueItem | null {
     return this.db
       .query("SELECT * FROM queue WHERE id = ?")

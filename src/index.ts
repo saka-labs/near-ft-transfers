@@ -11,11 +11,17 @@ const queue = new Queue(db);
 // Reset any PROCESSING items back to PENDING on startup (recovery mechanism)
 queue.resetProcessingOnStartup();
 
+// Support multiple private keys separated by commas for parallel processing
+const privateKeysEnv = process.env.NEAR_PRIVATE_KEY!;
+const privateKeys = privateKeysEnv.includes(",")
+  ? privateKeysEnv.split(",").map((key) => key.trim())
+  : privateKeysEnv;
+
 const executor = new Executor(queue, {
   rpcUrl: process.env.NEAR_RPC_URL!,
   accountId: process.env.NEAR_ACCOUNT_ID!,
   contractId: process.env.NEAR_CONTRACT_ID!,
-  privateKey: process.env.NEAR_PRIVATE_KEY!,
+  privateKeys: privateKeys,
 });
 executor.start();
 

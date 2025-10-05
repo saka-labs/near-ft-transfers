@@ -12,7 +12,7 @@ export type ExecutorOptions = {
   rpcUrl: string;
   accountId: string;
   contractId: string;
-  privateKey: string;
+  privateKeys: string | string[];
   batchSize?: number;
   interval?: number;
   minQueueToProcess?: number;
@@ -25,7 +25,7 @@ export class Executor {
 
   private options: ExecutorOptions;
 
-  private account: Account;
+  private accounts: Account[];
   private jsonRpcProvider: JsonRpcProvider;
 
   constructor(
@@ -35,7 +35,7 @@ export class Executor {
       interval = 500,
       minQueueToProcess = 1,
       ...options
-    }: ExecutorOptions,
+    }: ExecutorOptions
   ) {
     if (batchSize < 1 || batchSize > 100) {
       throw new Error("batchSize must be between 1 and 100");
@@ -50,12 +50,22 @@ export class Executor {
     };
 
     this.jsonRpcProvider = new JsonRpcProvider({ url: this.options.rpcUrl });
-    this.account = new Account(
-      this.options.accountId,
-      this.jsonRpcProvider,
-      new KeyPairSigner(
-        KeyPair.fromString(this.options.privateKey as KeyPairString),
-      ),
+
+    const privateKeys = Array.isArray(this.options.privateKeys)
+      ? this.options.privateKeys
+      : [this.options.privateKeys];
+
+    this.accounts = privateKeys.map(
+      (privateKey) =>
+        new Account(
+          this.options.accountId,
+          this.jsonRpcProvider,
+          new KeyPairSigner(KeyPair.fromString(privateKey as KeyPairString))
+        )
+    );
+
+    console.log(
+      `Executor initialized with ${this.accounts.length} signer(s) for account ${this.options.accountId}`
     );
   }
 
@@ -85,10 +95,36 @@ export class Executor {
     while (this.isRunning) {
       try {
         const startTime = Date.now();
-        const items = this.queue.pull(this.options.batchSize);
-        if (items.length >= this.options.minQueueToProcess!) {
-          await this.processBatch(items);
+
+        // Pull multiple batches (one per signer) and process in parallel
+        const batches: Array<{ items: QueueItem[]; accountIndex: number }> = [];
+
+        for (let i = 0; i < this.accounts.length; i++) {
+          const items = this.queue.pull(this.options.batchSize);
+          if (items.length >= this.options.minQueueToProcess!) {
+            batches.push({ items, accountIndex: i });
+          }
         }
+
+        // Process all batches in parallel using different signers
+        if (batches.length > 0) {
+          await Promise.all(
+            batches.map(async ({ items, accountIndex }, batchIndex) => {
+              const account = this.accounts[accountIndex];
+              if (!account) {
+                throw new Error(`No account found at index ${accountIndex}`);
+              }
+              // Stagger transaction creation to avoid block hash conflicts
+              // Each signer waits a bit to ensure they get different block hashes
+              // TODO: remove this once we have a better way to handle block hash conflicts
+              if (batchIndex > 0) {
+                await sleep(100 * batchIndex); // 100ms stagger
+              }
+              return this.processBatch(items, account, accountIndex);
+            })
+          );
+        }
+
         const processTime = Date.now() - startTime;
 
         // Check if queue is idle and notify waiters
@@ -111,19 +147,25 @@ export class Executor {
     }
   }
 
-  private async processBatch(items: QueueItem[]) {
+  private async processBatch(
+    items: QueueItem[],
+    account: Account,
+    signerIndex: number
+  ) {
     const itemIds = items.map((item) => item.id);
 
     try {
-      console.log(`Processing batch of ${items.length} items...`);
-
-      const actions = items.map((item) =>
-        this.createAction(item.receiver_account_id, item.amount),
+      console.log(
+        `Processing batch of ${items.length} items with signer #${signerIndex}...`
       );
 
-      const signed = await this.account.createSignedTransaction(
+      const actions = items.map((item) =>
+        this.createAction(item.receiver_account_id, item.amount)
+      );
+
+      const signed = await account.createSignedTransaction(
         this.options.contractId,
-        actions,
+        actions
       );
       const signedHash = await sha256Bs58(signed.transaction.encode());
 
@@ -138,7 +180,24 @@ export class Executor {
 
       this.queue.markBatchSuccess(itemIds, txHash);
     } catch (error) {
-      this.queue.markBatchFailed(itemIds, String(error));
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      if (
+        errorMessage.includes(
+          "parent block hash doesn't belong to the current chain"
+        ) ||
+        errorMessage.includes("Expired transaction") ||
+        errorMessage.includes("InvalidNonce")
+      ) {
+        console.warn(
+          `⚠️  Recoverable error for signer #${signerIndex} (will retry): ${errorMessage}`
+        );
+        this.queue.markBatchPending(itemIds);
+        return;
+      }
+
+      this.queue.markBatchFailed(itemIds, errorMessage);
     }
   }
 
@@ -151,7 +210,7 @@ export class Executor {
         memo: null, // TODO: handle memo
       },
       1000000000000n * 3n, // Gas:  3 TGas, max TGas per transaction is 300TGas, max action per transaction is 100, 300 / 100 = 3 TGas
-      1n, // Attached deposit: 1 yoctoNEAR
+      1n // Attached deposit: 1 yoctoNEAR
     );
   }
 }

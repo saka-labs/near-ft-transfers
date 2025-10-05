@@ -1,6 +1,6 @@
 import { Account } from "@near-js/accounts";
 import { KeyPair } from "@near-js/crypto";
-import { JsonRpcProvider, type Provider } from "@near-js/providers";
+import { JsonRpcProvider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import { NEAR } from "@near-js/tokens";
 import { DEFAULT_ACCOUNT_ID, DEFAULT_PRIVATE_KEY, Sandbox } from "near-sandbox";
@@ -29,30 +29,43 @@ beforeAll(async () => {
   });
 
   console.log(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
-  const provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
+  const provider = new JsonRpcProvider({ url: sandbox.rpcUrl });
   const keyPair = KeyPair.fromString(DEFAULT_PRIVATE_KEY);
 
   defaultAccount = new Account(
     DEFAULT_ACCOUNT_ID,
     provider,
-    new KeyPairSigner(keyPair),
+    new KeyPairSigner(keyPair)
   );
 
   // Account A is the owner of the contract and the sender
   // Account B is the receiver of the transfer
 
-  // Create account A
+  // Create account A with the first key
   const accountAKeyPair = KeyPair.fromRandom("ED25519");
   await defaultAccount.createAccount(
     `account-a.${DEFAULT_ACCOUNT_ID}`,
     accountAKeyPair.getPublicKey(),
-    NEAR.toUnits(10),
+    NEAR.toUnits(10)
   );
 
   accountA = new Account(
     "account-a." + DEFAULT_ACCOUNT_ID,
-    new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
-    new KeyPairSigner(accountAKeyPair),
+    provider,
+    new KeyPairSigner(accountAKeyPair)
+  );
+
+  // Add additional access keys to account A for parallel processing
+  const additionalKeyPairs: KeyPair[] = [];
+  const numAdditionalKeys = 4; // Change this number to create more/fewer keys
+
+  for (let i = 0; i < numAdditionalKeys; i++) {
+    const keyPair = KeyPair.fromRandom("ED25519");
+    additionalKeyPairs.push(keyPair);
+    await accountA.addFullAccessKey(keyPair.getPublicKey());
+  }
+  console.log(
+    `Added ${numAdditionalKeys} additional access keys to account-a for parallel processing`
   );
 
   // Create account B
@@ -60,13 +73,13 @@ beforeAll(async () => {
   await defaultAccount.createAccount(
     `account-b.${DEFAULT_ACCOUNT_ID}`,
     accountBKeyPair.getPublicKey(),
-    NEAR.toUnits(10),
+    NEAR.toUnits(10)
   );
 
   accountB = new Account(
     "account-b." + DEFAULT_ACCOUNT_ID,
-    new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
-    new KeyPairSigner(accountBKeyPair),
+    provider,
+    new KeyPairSigner(accountBKeyPair)
   );
 
   // Deploy FT contract
@@ -92,12 +105,15 @@ beforeAll(async () => {
     deposit: NEAR.toUnits(0.00125), // 0.00125 NEAR
   });
 
-  // Initialize executor
+  // Initialize executor with numAdditionalKeys + 1 signers for parallel processing
   executor = new Executor(queue, {
     rpcUrl: sandbox.rpcUrl,
     accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
     contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-    privateKey: accountAKeyPair.toString(),
+    privateKeys: [
+      accountAKeyPair.toString(),
+      ...additionalKeyPairs.map((keyPair) => keyPair.toString()),
+    ],
   });
   executor.start();
 
