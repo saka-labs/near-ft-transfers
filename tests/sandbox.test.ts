@@ -112,7 +112,7 @@ afterAll(async () => {
 });
 
 test("should transfer 1000 FT tokens in batches", async () => {
-  const transferCount = 1;
+  const transferCount = 1000;
   const amountPerTransfer = "1";
 
   // Get initial balance

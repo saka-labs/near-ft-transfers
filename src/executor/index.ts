@@ -4,7 +4,7 @@ import type { QueueItem } from "../types";
 import { JsonRpcProvider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
-import { actionCreators } from "@near-js/transactions";
+import { actionCreators, SignedTransaction } from "@near-js/transactions";
 import { sleep } from "bun";
 import { sha256Bs58 } from "../utils";
 
@@ -59,11 +59,50 @@ export class Executor {
     );
   }
 
-  start() {
+  async start() {
     if (this.isRunning) return;
+    await this.recoverPendingTransactions();
     this.queue.recover();
     this.isRunning = true;
     this.run();
+  }
+
+  private async recoverPendingTransactions() {
+    const pendingTxs = this.queue.getPendingSignedTransactions();
+
+    if (pendingTxs.length === 0) {
+      console.log("No pending signed transactions to recover");
+      return;
+    }
+
+    console.log(
+      `Recovering ${pendingTxs.length} pending signed transactions...`,
+    );
+
+    for (const tx of pendingTxs) {
+      try {
+        console.log(
+          `Re-broadcasting transaction ${tx.tx_hash} for queue items [${tx.queue_ids.join(", ")}]`,
+        );
+
+        // Decode the signed transaction and re-broadcast it
+        const result = await this.jsonRpcProvider.sendTransaction(
+          SignedTransaction.decode(tx.signed_tx),
+        );
+        const txHash = result.transaction.hash;
+
+        console.log(`Successfully re-broadcast transaction: ${txHash}`);
+        this.queue.markBatchSuccess(tx.id, txHash);
+      } catch (error) {
+        console.error(
+          `Failed to re-broadcast transaction ${tx.tx_hash}:`,
+          error,
+        );
+        this.queue.recoverFailedBatch(tx.id, error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    console.log("Recovery complete");
   }
 
   stop() {
@@ -81,7 +120,6 @@ export class Executor {
       this.idleResolvers.push(resolve);
     });
   }
-
 
   private async run() {
     while (this.isRunning) {
@@ -115,6 +153,7 @@ export class Executor {
 
   private async processBatch(items: QueueItem[]) {
     const itemIds = items.map((item) => item.id);
+    let batchId;
 
     try {
       console.log(`Processing batch of ${items.length} items...`);
@@ -127,10 +166,14 @@ export class Executor {
         this.options.contractId,
         actions,
       );
-      const signedEncoded = signed.transaction.encode();
-      const signedHash = await sha256Bs58(signedEncoded);
+      const signedHash = await sha256Bs58(signed.transaction.encode());
 
-      this.queue.markBatchProcessing(itemIds, signedHash, signedEncoded);
+      // Create signed transaction record and associate with queue items in a transaction
+      batchId = this.queue.createSignedTransaction(
+        signedHash,
+        signed.encode(),
+        itemIds,
+      );
 
       const result = await this.jsonRpcProvider.sendTransaction(signed);
 
@@ -138,9 +181,13 @@ export class Executor {
       const txHash = result.transaction.hash;
       console.log("Transaction hash:", txHash);
 
-      this.queue.markBatchSuccess(itemIds, txHash);
+      this.queue.markBatchSuccess(batchId, txHash);
     } catch (error) {
-      this.queue.markBatchFailed(itemIds, String(error));
+      console.error("Failed to process batch:", error);
+      if (batchId) {
+        // Recovery mechanism will reset items to pending
+        this.queue.recoverFailedBatch(batchId, error instanceof Error ? error.message : String(error));
+      }
     }
   }
 

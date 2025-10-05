@@ -22,11 +22,9 @@ export type QueueItem = {
   id: number
   receiver_account_id: string
   amount: string
-  status: QueueStatusType
   created_at: number
   updated_at: number
   retry_count: number
   error_message: string | null
-  tx_hash: string | null
-  signed_tx: Uint8Array | null
+  batch_id: number | null
 }

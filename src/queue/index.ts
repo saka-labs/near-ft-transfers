@@ -41,21 +41,33 @@ export class Queue extends EventEmitter {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         receiver_account_id TEXT NOT NULL,
         amount TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         retry_count INTEGER DEFAULT 0,
         error_message TEXT,
-        tx_hash TEXT,
-        signed_tx BLOB
+        batch_id INTEGER
       )
     `);
-    // Index for efficient pending queries by status
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_status ON queue(status)`);
-    // Index for efficient lookup by account_id and status (for deduplication)
+    // Index for efficient lookup by batch_id
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_batch_id ON queue(batch_id)`);
+    // Index for efficient lookup by account_id and batch_id (for deduplication)
     this.db.run(
-      `CREATE INDEX IF NOT EXISTS idx_account_status ON queue(receiver_account_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_account_batch ON queue(receiver_account_id, batch_id)`,
     );
+
+    // Table for storing batch transactions
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS batch_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tx_hash TEXT NOT NULL,
+        signed_tx BLOB,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tx_status ON batch_transactions(status)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tx_hash ON batch_transactions(tx_hash)`);
   }
 
   push(transfer: TransferRequest): number {
@@ -63,12 +75,12 @@ export class Queue extends EventEmitter {
 
     const tx = this.db.transaction(() => {
       if (this.options.mergeExistingAccounts) {
-        // Check if there's a pending transaction for the same account
+        // Check if there's a pending transaction for the same account (batch_id is NULL means pending)
         const existing = this.db
           .query(
-            "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND status = ? LIMIT 1",
+            "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND batch_id IS NULL LIMIT 1",
           )
-          .get(transfer.receiver_account_id, QueueStatus.PENDING) as {
+          .get(transfer.receiver_account_id) as {
             id: number;
             amount: string;
           } | null;
@@ -88,11 +100,10 @@ export class Queue extends EventEmitter {
 
       // Create new entry (either merging is disabled or no existing entry found)
       this.db.run(
-        "INSERT INTO queue (receiver_account_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO queue (receiver_account_id, amount, created_at, updated_at) VALUES (?, ?, ?, ?)",
         [
           transfer.receiver_account_id,
           transfer.amount,
-          QueueStatus.PENDING,
           now,
           now,
         ],
@@ -107,92 +118,79 @@ export class Queue extends EventEmitter {
   }
 
   pull(limit: number = 10): QueueItem[] {
-    // Atomically get and mark as processing
-    const tx = this.db.transaction(() => {
-      const rows = this.db
-        .query("SELECT * FROM queue WHERE status = ? ORDER BY id ASC LIMIT ?")
-        .all(QueueStatus.PENDING, limit) as QueueItem[];
+    // Get pending items (batch_id is NULL means pending)
+    const items = this.db
+      .query("SELECT * FROM queue WHERE batch_id IS NULL ORDER BY id ASC LIMIT ?")
+      .all(limit) as QueueItem[];
 
-      if (rows.length > 0) {
-        const ids = rows.map((r) => r.id).join(",");
-        this.db.run(
-          `UPDATE queue SET status = ?, updated_at = ? WHERE id IN (${ids})`,
-          [QueueStatus.PROCESSING, Date.now()],
-        );
-      }
-      return rows;
-    });
-
-    const items = tx();
     if (items.length > 0) {
       this.emit('pulled', items);
     }
     return items;
   }
 
-  markProcessing(id: number, txHash: string, signedTx: Uint8Array) {
-    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, signed_tx = ?, updated_at = ? WHERE id = ?", [
-      QueueStatus.PROCESSING,
-      txHash,
-      signedTx,
-      Date.now(),
-      id,
-    ]);
+  createSignedTransaction(txHash: string, signedTx: Uint8Array, queueIds: number[]): number {
+    const now = Date.now();
+
+    const tx = this.db.transaction(() => {
+      // Create batch transaction record
+      this.db.run(
+        "INSERT INTO batch_transactions (tx_hash, signed_tx, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [txHash, signedTx, QueueStatus.PROCESSING, now, now],
+      );
+      const result = this.db.query("SELECT last_insert_rowid() as id").get() as { id: number };
+      const batchId = result.id;
+
+      // Associate queue items with this batch
+      const placeholders = queueIds.map(() => "?").join(",");
+      this.db.run(
+        `UPDATE queue SET batch_id = ?, updated_at = ? WHERE id IN (${placeholders})`,
+        [batchId, now, ...queueIds],
+      );
+
+      return batchId;
+    });
+
+    return tx();
   }
 
-  markBatchProcessing(ids: number[], txHash: string, signedTx: Uint8Array) {
-    if (ids.length === 0) return;
-    const placeholders = ids.map(() => "?").join(",");
-    this.db.run(
-      `UPDATE queue SET status = ?, tx_hash = ?, signed_tx = ?, updated_at = ? WHERE id IN (${placeholders})`,
-      [QueueStatus.PROCESSING, txHash, signedTx, Date.now(), ...ids],
-    );
-  }
+  markBatchSuccess(batchId: number, txHash: string) {
+    const now = Date.now();
+    const items = this.db
+      .query("SELECT * FROM queue WHERE batch_id = ?")
+      .all(batchId) as QueueItem[];
 
-  markSuccess(id: number, txHash: string) {
-    const item = this.getById(id);
-    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id = ?", [
-      QueueStatus.SUCCESS,
-      txHash,
-      Date.now(),
-      id,
-    ]);
-    if (item) {
-      this.emit('success', item, txHash);
-    }
-  }
+    const tx = this.db.transaction(() => {
+      // Update batch transaction status, store actual tx_hash, and clean up blob
+      this.db.run(
+        "UPDATE batch_transactions SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id = ?",
+        [QueueStatus.SUCCESS, txHash, now, batchId],
+      );
+    });
 
-  markBatchSuccess(ids: number[], txHash: string) {
-    if (ids.length === 0) return;
-    const items = this.getByIds(ids);
-    const placeholders = ids.map(() => "?").join(",");
-    this.db.run(
-      `UPDATE queue SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id IN (${placeholders})`,
-      [QueueStatus.SUCCESS, txHash, Date.now(), ...ids],
-    );
+    tx();
     items.forEach(item => this.emit('success', item, txHash));
   }
 
-  markFailed(id: number, error: string) {
-    const item = this.getById(id);
-    this.db.run(
-      "UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, signed_tx = NULL, updated_at = ? WHERE id = ?",
-      [QueueStatus.FAILED, error, Date.now(), id],
-    );
-    if (item) {
-      this.emit('failed', item, error);
-    }
-  }
+  recoverFailedBatch(batchId: number, errorMessage?: string) {
+    const now = Date.now();
+    const items = this.db
+      .query("SELECT * FROM queue WHERE batch_id = ?")
+      .all(batchId) as QueueItem[];
 
-  markBatchFailed(ids: number[], error: string) {
-    if (ids.length === 0) return;
-    const items = this.getByIds(ids);
-    const placeholders = ids.map(() => "?").join(",");
-    this.db.run(
-      `UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, signed_tx = NULL, updated_at = ? WHERE id IN (${placeholders})`,
-      [QueueStatus.FAILED, error, Date.now(), ...ids],
-    );
-    items.forEach(item => this.emit('failed', item, error));
+    const tx = this.db.transaction(() => {
+      // Delete the failed batch transaction record
+      this.db.run("DELETE FROM batch_transactions WHERE id = ?", [batchId]);
+
+      // Reset queue items to pending by clearing batch_id, incrementing retry_count, and storing error_message
+      this.db.run(
+        "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE batch_id = ?",
+        [errorMessage || null, now, batchId],
+      );
+    });
+
+    tx();
+    items.forEach(item => this.emit('failed', item, errorMessage || 'Batch processing failed'));
   }
 
   getById(id: number): QueueItem | null {
@@ -209,26 +207,64 @@ export class Queue extends EventEmitter {
       .all(...ids) as QueueItem[];
   }
 
+  getPendingSignedTransactions(): Array<{
+    id: number;
+    tx_hash: string;
+    signed_tx: Uint8Array;
+    queue_ids: number[];
+  }> {
+    // Get all pending/processing batch transactions
+    const batchTxs = this.db
+      .query(
+        "SELECT id, tx_hash, signed_tx FROM batch_transactions WHERE status = ? AND signed_tx IS NOT NULL",
+      )
+      .all(QueueStatus.PROCESSING) as Array<{
+        id: number;
+        tx_hash: string;
+        signed_tx: Uint8Array;
+      }>;
+
+    // For each batch transaction, get the associated queue item IDs
+    return batchTxs.map((tx) => {
+      const queueItems = this.db
+        .query("SELECT id FROM queue WHERE batch_id = ?")
+        .all(tx.id) as Array<{ id: number }>;
+
+      return {
+        ...tx,
+        queue_ids: queueItems.map((item) => item.id),
+      };
+    });
+  }
+
   recover() {
-    // Reset any PROCESSING and FAILED items back to PENDING on startup (recovery mechanism)
+    // Reset any items with pending/processing batches back to pending (recovery mechanism)
     const now = Date.now();
-    this.db.run(
-      "UPDATE queue SET status = ?, updated_at = ? WHERE status IN (?, ?)",
-      [QueueStatus.PENDING, now, QueueStatus.PROCESSING, QueueStatus.FAILED],
-    );
+    const tx = this.db.transaction(() => {
+      // Reset queue items by clearing batch_id
+      this.db.run(
+        "UPDATE queue SET batch_id = NULL, updated_at = ? WHERE batch_id IS NOT NULL AND batch_id IN (SELECT id FROM batch_transactions WHERE status IN (?, ?))",
+        [now, QueueStatus.PENDING, QueueStatus.PROCESSING],
+      );
+
+      // Delete all non-successful batch transactions (we'll recreate them on retry)
+      this.db.run("DELETE FROM batch_transactions WHERE status != ?", [QueueStatus.SUCCESS]);
+    });
+
+    tx();
   }
 
   getStats(): QueueStats {
     const stats = this.db.query(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as processing,
-        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success,
-        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as failed
-      FROM queue
+        SUM(CASE WHEN q.batch_id IS NULL THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN bt.status = ? THEN 1 ELSE 0 END) as processing,
+        SUM(CASE WHEN bt.status = ? THEN 1 ELSE 0 END) as success,
+        SUM(CASE WHEN bt.status = ? THEN 1 ELSE 0 END) as failed
+      FROM queue q
+      LEFT JOIN batch_transactions bt ON q.batch_id = bt.id
     `).get(
-      QueueStatus.PENDING,
       QueueStatus.PROCESSING,
       QueueStatus.SUCCESS,
       QueueStatus.FAILED
@@ -240,9 +276,10 @@ export class Queue extends EventEmitter {
   hasPendingOrProcessing(): boolean {
     const result = this.db.query(`
       SELECT COUNT(*) as count
-      FROM queue
-      WHERE status IN (?, ?)
-    `).get(QueueStatus.PENDING, QueueStatus.PROCESSING) as { count: number };
+      FROM queue q
+      LEFT JOIN batch_transactions bt ON q.batch_id = bt.id
+      WHERE q.batch_id IS NULL OR bt.status = ?
+    `).get(QueueStatus.PROCESSING) as { count: number };
 
     return result.count > 0;
   }
