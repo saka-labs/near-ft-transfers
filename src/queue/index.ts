@@ -142,6 +142,17 @@ export class Queue extends EventEmitter {
     }
   }
 
+  markBatchSuccess(ids: number[], txHash: string) {
+    if (ids.length === 0) return;
+    const items = this.getByIds(ids);
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      [QueueStatus.SUCCESS, txHash, Date.now(), ...ids],
+    );
+    items.forEach(item => this.emit('success', item, txHash));
+  }
+
   markFailed(id: number, error: string) {
     const item = this.getById(id);
     this.db.run(
@@ -151,6 +162,17 @@ export class Queue extends EventEmitter {
     if (item) {
       this.emit('failed', item, error);
     }
+  }
+
+  markBatchFailed(ids: number[], error: string) {
+    if (ids.length === 0) return;
+    const items = this.getByIds(ids);
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      [QueueStatus.FAILED, error, Date.now(), ...ids],
+    );
+    items.forEach(item => this.emit('failed', item, error));
   }
 
   getById(id: number): QueueItem | null {

@@ -14,6 +14,7 @@ export type ExecutorOptions = {
   privateKey: string;
   batchSize?: number;
   interval?: number;
+  minQueueToProcess?: number;
 };
 
 export class Executor {
@@ -27,7 +28,7 @@ export class Executor {
 
   constructor(
     queue: Queue,
-    { batchSize = 100, interval = 1000, ...options }: ExecutorOptions,
+    { batchSize = 100, interval = 500, minQueueToProcess = 1, ...options }: ExecutorOptions,
   ) {
     if (batchSize < 1 || batchSize > 100) {
       throw new Error("batchSize must be between 1 and 100");
@@ -38,6 +39,7 @@ export class Executor {
       ...options,
       batchSize,
       interval,
+      minQueueToProcess,
     };
 
     this.account = new Account(
@@ -74,10 +76,12 @@ export class Executor {
   private async run() {
     while (this.isRunning) {
       try {
+        const startTime = Date.now();
         const items = this.queue.pull(this.options.batchSize);
-        if (items.length > 0) {
+        if (items.length >= this.options.minQueueToProcess!) {
           await this.processBatch(items);
         }
+        const processTime = Date.now() - startTime;
 
         // Check if queue is idle and notify waiters
         if (!this.queue.hasPendingOrProcessing() && this.idleResolvers.length > 0) {
@@ -86,9 +90,9 @@ export class Executor {
           resolvers.forEach((resolve) => resolve());
         }
 
-        // Wait before next poll
-        // TODO: next pool should be interval - processBatch time
-        await sleep(this.options.interval!);
+        // Wait before next poll, adjusted for processing time
+        const sleepTime = Math.max(0, this.options.interval! - processTime);
+        await sleep(sleepTime);
       } catch (error) {
         console.error("Executor error:", error);
         await sleep(this.options.interval!);
@@ -112,13 +116,9 @@ export class Executor {
       const txHash = result.transaction.hash;
       console.log("Transaction hash:", txHash);
 
-      for (const item of items) {
-        this.queue.markSuccess(item.id, txHash);
-      }
+      this.queue.markBatchSuccess(items.map(item => item.id), txHash);
     } catch (error) {
-      for (const item of items) {
-        this.queue.markFailed(item.id, String(error));
-      }
+      this.queue.markBatchFailed(items.map(item => item.id), String(error));
     }
   }
 
