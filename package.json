@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run src/index.ts --watch",
-    "sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun run tests/sandbox.ts"
+    "test:sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun test tests/sandbox.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

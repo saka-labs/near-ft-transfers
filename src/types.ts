@@ -27,4 +27,5 @@ export type QueueItem = {
   updated_at: number
   retry_count: number
   error_message: string | null
+  tx_hash: string | null
 }

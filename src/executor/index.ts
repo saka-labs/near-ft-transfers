@@ -19,6 +19,7 @@ export type ExecutorOptions = {
 export class Executor {
   private queue: Queue;
   private isRunning = false;
+  private idleResolvers: (() => void)[] = [];
 
   private options: ExecutorOptions;
 
@@ -58,12 +59,31 @@ export class Executor {
     this.isRunning = false;
   }
 
+  async waitUntilIdle(): Promise<void> {
+    // If already idle, resolve immediately
+    if (!this.queue.hasPendingOrProcessing()) {
+      return Promise.resolve();
+    }
+
+    // Wait for queue to become idle
+    return new Promise((resolve) => {
+      this.idleResolvers.push(resolve);
+    });
+  }
+
   private async run() {
     while (this.isRunning) {
       try {
         const items = this.queue.pull(this.options.batchSize);
         if (items.length > 0) {
           await this.processBatch(items);
+        }
+
+        // Check if queue is idle and notify waiters
+        if (!this.queue.hasPendingOrProcessing() && this.idleResolvers.length > 0) {
+          const resolvers = [...this.idleResolvers];
+          this.idleResolvers = [];
+          resolvers.forEach((resolve) => resolve());
         }
 
         // Wait before next poll
@@ -88,8 +108,12 @@ export class Executor {
       });
       console.log("Transaction result:", result.status);
 
+      // Extract transaction hash from result
+      const txHash = result.transaction.hash;
+      console.log("Transaction hash:", txHash);
+
       for (const item of items) {
-        this.queue.markSuccess(item.id);
+        this.queue.markSuccess(item.id, txHash);
       }
     } catch (error) {
       for (const item of items) {

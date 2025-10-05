@@ -1,16 +1,33 @@
 import type { Database } from "bun:sqlite";
 import type { TransferRequest, QueueItem } from "../types";
 import { QueueStatus } from "../types";
+import { EventEmitter } from "events";
 
 export type QueueOptions = {
   mergeExistingAccounts?: boolean;
 };
 
-export class Queue {
+export type QueueStats = {
+  pending: number;
+  processing: number;
+  success: number;
+  failed: number;
+  total: number;
+};
+
+export type QueueEvents = {
+  pushed: (id: number, transfer: TransferRequest) => void;
+  pulled: (items: QueueItem[]) => void;
+  success: (item: QueueItem, txHash: string) => void;
+  failed: (item: QueueItem, error: string) => void;
+};
+
+export class Queue extends EventEmitter {
   private db: Database;
   private options: QueueOptions;
 
   constructor(db: Database, options: QueueOptions = {}) {
+    super();
     this.db = db;
     this.options = {
       mergeExistingAccounts: options.mergeExistingAccounts ?? true,
@@ -28,7 +45,8 @@ export class Queue {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         retry_count INTEGER DEFAULT 0,
-        error_message TEXT
+        error_message TEXT,
+        tx_hash TEXT
       )
     `);
     // Index for efficient pending queries by status
@@ -39,7 +57,7 @@ export class Queue {
     );
   }
 
-  push(transfer: TransferRequest) {
+  push(transfer: TransferRequest): number {
     const now = Date.now();
 
     const tx = this.db.transaction(() => {
@@ -63,7 +81,7 @@ export class Queue {
             "UPDATE queue SET amount = ?, updated_at = ? WHERE id = ?",
             [newAmount, now, existing.id],
           );
-          return;
+          return existing.id;
         }
       }
 
@@ -78,9 +96,13 @@ export class Queue {
           now,
         ],
       );
+      return this.db.query("SELECT last_insert_rowid() as id").get() as { id: number };
     });
 
-    tx();
+    const result = tx();
+    const id = typeof result === 'number' ? result : result.id;
+    this.emit('pushed', id, transfer);
+    return id;
   }
 
   pull(limit: number = 10): QueueItem[] {
@@ -100,21 +122,85 @@ export class Queue {
       return rows;
     });
 
-    return tx();
+    const items = tx();
+    if (items.length > 0) {
+      this.emit('pulled', items);
+    }
+    return items;
   }
 
-  markSuccess(id: number) {
-    this.db.run("UPDATE queue SET status = ?, updated_at = ? WHERE id = ?", [
+  markSuccess(id: number, txHash: string) {
+    const item = this.getById(id);
+    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?", [
       QueueStatus.SUCCESS,
+      txHash,
       Date.now(),
       id,
     ]);
+    if (item) {
+      this.emit('success', item, txHash);
+    }
   }
 
   markFailed(id: number, error: string) {
+    const item = this.getById(id);
     this.db.run(
       "UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE id = ?",
       [QueueStatus.FAILED, error, Date.now(), id],
     );
+    if (item) {
+      this.emit('failed', item, error);
+    }
+  }
+
+  getById(id: number): QueueItem | null {
+    return this.db
+      .query("SELECT * FROM queue WHERE id = ?")
+      .get(id) as QueueItem | null;
+  }
+
+  getByIds(ids: number[]): QueueItem[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    return this.db
+      .query(`SELECT * FROM queue WHERE id IN (${placeholders})`)
+      .all(...ids) as QueueItem[];
+  }
+
+  resetProcessingOnStartup() {
+    // Reset any PROCESSING items back to PENDING on startup (recovery mechanism)
+    this.db.run(
+      "UPDATE queue SET status = ?, updated_at = ? WHERE status = ?",
+      [QueueStatus.PENDING, Date.now(), QueueStatus.PROCESSING],
+    );
+  }
+
+  getStats(): QueueStats {
+    const stats = this.db.query(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as processing,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as failed
+      FROM queue
+    `).get(
+      QueueStatus.PENDING,
+      QueueStatus.PROCESSING,
+      QueueStatus.SUCCESS,
+      QueueStatus.FAILED
+    ) as QueueStats;
+
+    return stats;
+  }
+
+  hasPendingOrProcessing(): boolean {
+    const result = this.db.query(`
+      SELECT COUNT(*) as count
+      FROM queue
+      WHERE status IN (?, ?)
+    `).get(QueueStatus.PENDING, QueueStatus.PROCESSING) as { count: number };
+
+    return result.count > 0;
   }
 }
