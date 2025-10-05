@@ -1,11 +1,11 @@
 import { Account } from "@near-js/accounts";
 import type { Queue } from "../queue";
 import type { QueueItem } from "../types";
-import { sleep } from "../utils";
 import { JsonRpcProvider, type Provider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { actionCreators } from "@near-js/transactions";
+import { sleep } from "bun";
 
 export type ExecutorOptions = {
   rpcUrl: string;

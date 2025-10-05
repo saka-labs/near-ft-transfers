@@ -4,6 +4,7 @@ import { Executor } from "./executor";
 import { Database } from "bun:sqlite";
 import { Queue } from "./queue";
 
+// TODO: This should not use memory in production
 const db = new Database(":memory:");
 const queue = new Queue(db);
 
