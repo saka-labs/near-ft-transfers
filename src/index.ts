@@ -331,6 +331,14 @@ const unstallTransfersRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Invalid request body",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
