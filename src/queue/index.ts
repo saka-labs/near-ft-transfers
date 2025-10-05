@@ -183,6 +183,45 @@ export class Queue extends EventEmitter {
     );
   }
 
+  unstallItem(itemId: number): boolean {
+    const now = Date.now();
+    const item = this.getById(itemId);
+
+    if (!item || !item.is_stalled) {
+      return false;
+    }
+
+    this.db.run(
+      "UPDATE queue SET is_stalled = 0, batch_id = NULL, updated_at = ? WHERE id = ?",
+      [now, itemId],
+    );
+    return true;
+  }
+
+  unstallItems(itemIds: number[]): number {
+    if (itemIds.length === 0) return 0;
+
+    const now = Date.now();
+    const placeholders = itemIds.map(() => "?").join(",");
+
+    const result = this.db.run(
+      `UPDATE queue SET is_stalled = 0, batch_id = NULL, updated_at = ? WHERE id IN (${placeholders}) AND is_stalled = 1`,
+      [now, ...itemIds],
+    );
+
+    return result.changes;
+  }
+
+  unstallAll(): number {
+    const now = Date.now();
+    const result = this.db.run(
+      "UPDATE queue SET is_stalled = 0, batch_id = NULL, updated_at = ? WHERE is_stalled = 1",
+      [now],
+    );
+
+    return result.changes;
+  }
+
   recoverFailedBatch(batchId: number, errorMessage?: string) {
     const now = Date.now();
     const items = this.db
@@ -217,6 +256,28 @@ export class Queue extends EventEmitter {
     return this.db
       .query("SELECT * FROM queue WHERE id = ?")
       .get(id) as QueueItem | null;
+  }
+
+  getAll(filters?: {
+    receiver_account_id?: string;
+    is_stalled?: boolean;
+  }): QueueItem[] {
+    let query = "SELECT * FROM queue WHERE 1=1";
+    const params: any[] = [];
+
+    if (filters?.receiver_account_id) {
+      query += " AND receiver_account_id = ?";
+      params.push(filters.receiver_account_id);
+    }
+
+    if (filters?.is_stalled !== undefined) {
+      query += " AND is_stalled = ?";
+      params.push(filters.is_stalled ? 1 : 0);
+    }
+
+    query += " ORDER BY id ASC";
+
+    return this.db.query(query).all(...params) as QueueItem[];
   }
 
   getBatchTransactionById(batchId: number): { status: string; tx_hash: string } | null {

@@ -16,6 +16,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@hono/swagger-ui": "^0.5.2",
+    "@hono/zod-openapi": "^1.1.3",
     "@near-js/accounts": "^2.3.3",
     "@near-js/crypto": "^2.3.3",
     "@near-js/providers": "^2.3.3",

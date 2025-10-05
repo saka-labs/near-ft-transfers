@@ -376,4 +376,165 @@ describe("Queue", () => {
       expect(queue.hasPendingOrProcessing()).toBe(false);
     });
   });
+
+  describe("getAll", () => {
+    test("should return all items without filters", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
+
+      const items = queue.getAll();
+      expect(items).toHaveLength(3);
+    });
+
+    test("should filter by receiver_account_id", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "alice.testnet", amount: "3000000" });
+
+      const items = queue.getAll({ receiver_account_id: "alice.testnet" });
+      expect(items).toHaveLength(1); // Merged into one due to mergeExistingAccounts
+      expect(items[0]!.receiver_account_id).toBe("alice.testnet");
+    });
+
+    test("should filter by is_stalled", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+
+      const items = queue.pull(2);
+      queue.markItemStalled(items[0]!.id, "Test error");
+
+      const stalledItems = queue.getAll({ is_stalled: true });
+      expect(stalledItems).toHaveLength(1);
+      expect(stalledItems[0]!.receiver_account_id).toBe("alice.testnet");
+
+      const notStalledItems = queue.getAll({ is_stalled: false });
+      expect(notStalledItems).toHaveLength(1);
+      expect(notStalledItems[0]!.receiver_account_id).toBe("bob.testnet");
+    });
+
+    test("should filter by both receiver_account_id and is_stalled", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "alice.testnet", amount: "3000000" });
+
+      const items = queue.pull(3);
+      queue.markItemStalled(items[0]!.id, "Test error");
+
+      const filtered = queue.getAll({
+        receiver_account_id: "alice.testnet",
+        is_stalled: true
+      });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0]!.receiver_account_id).toBe("alice.testnet");
+      expect(filtered[0]!.is_stalled).toBe(1);
+    });
+
+    test("should return items in FIFO order", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
+
+      const items = queue.getAll();
+      expect(items[0]!.receiver_account_id).toBe("alice.testnet");
+      expect(items[1]!.receiver_account_id).toBe("bob.testnet");
+      expect(items[2]!.receiver_account_id).toBe("charlie.testnet");
+    });
+
+    test("should return empty array when no items match filters", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+
+      const items = queue.getAll({ receiver_account_id: "bob.testnet" });
+      expect(items).toHaveLength(0);
+    });
+  });
+
+  describe("unstall operations", () => {
+    test("should unstall a single item", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      const items = queue.pull(1);
+      queue.markItemStalled(items[0]!.id, "Test error");
+
+      const success = queue.unstallItem(items[0]!.id);
+      expect(success).toBe(true);
+
+      const item = queue.getById(items[0]!.id);
+      expect(item!.is_stalled).toBe(0);
+      expect(item!.batch_id).toBeNull();
+    });
+
+    test("should return false when unstalling non-existent item", () => {
+      const success = queue.unstallItem(999);
+      expect(success).toBe(false);
+    });
+
+    test("should return false when unstalling non-stalled item", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      const items = queue.pull(1);
+
+      const success = queue.unstallItem(items[0]!.id);
+      expect(success).toBe(false);
+    });
+
+    test("should unstall multiple items by ids", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
+
+      const items = queue.pull(3);
+      queue.markItemStalled(items[0]!.id, "Error 1");
+      queue.markItemStalled(items[1]!.id, "Error 2");
+
+      const count = queue.unstallItems([items[0]!.id, items[1]!.id]);
+      expect(count).toBe(2);
+
+      const item1 = queue.getById(items[0]!.id);
+      const item2 = queue.getById(items[1]!.id);
+      expect(item1!.is_stalled).toBe(0);
+      expect(item2!.is_stalled).toBe(0);
+    });
+
+    test("should only unstall stalled items when using unstallItems", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+
+      const items = queue.pull(2);
+      queue.markItemStalled(items[0]!.id, "Error");
+
+      // Try to unstall both, but only one is stalled
+      const count = queue.unstallItems([items[0]!.id, items[1]!.id]);
+      expect(count).toBe(1);
+    });
+
+    test("should unstall all stalled items", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
+      queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
+
+      const items = queue.pull(3);
+      queue.markItemStalled(items[0]!.id, "Error 1");
+      queue.markItemStalled(items[1]!.id, "Error 2");
+      queue.markItemStalled(items[2]!.id, "Error 3");
+
+      const count = queue.unstallAll();
+      expect(count).toBe(3);
+
+      const stalledItems = queue.getAll({ is_stalled: true });
+      expect(stalledItems).toHaveLength(0);
+
+      const notStalledItems = queue.getAll({ is_stalled: false });
+      expect(notStalledItems).toHaveLength(3);
+    });
+
+    test("should return 0 when unstalling empty array", () => {
+      const count = queue.unstallItems([]);
+      expect(count).toBe(0);
+    });
+
+    test("should return 0 when no stalled items exist for unstallAll", () => {
+      queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
+      const count = queue.unstallAll();
+      expect(count).toBe(0);
+    });
+  });
 });
