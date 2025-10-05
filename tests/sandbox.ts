@@ -5,9 +5,15 @@ import { KeyPairSigner } from "@near-js/signers";
 import { NEAR } from "@near-js/tokens";
 import { DEFAULT_ACCOUNT_ID, DEFAULT_PRIVATE_KEY, Sandbox } from "near-sandbox";
 import { readFile } from "fs/promises";
-import { actionCreators } from "@near-js/transactions";
+import { Database } from "bun:sqlite";
+import { Queue } from "../src/queue";
+import { Executor } from "../src/executor";
 
 (async () => {
+  const queue = new Queue(new Database(":memory:"), {
+    mergeExistingAccounts: false,
+  });
+
   const sandbox = await Sandbox.start({
     config: {
       rpcPort: 44444,
@@ -17,6 +23,7 @@ import { actionCreators } from "@near-js/transactions";
     console.log(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
     const provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
     const keyPair = KeyPair.fromString(DEFAULT_PRIVATE_KEY);
+
     const defaultAccount = new Account(
       DEFAULT_ACCOUNT_ID,
       provider,
@@ -71,34 +78,33 @@ import { actionCreators } from "@near-js/transactions";
       deposit: NEAR.toUnits(0.00125), // 0.00125 NEAR
     });
 
-    // Batch transfers
-    const action = actionCreators.functionCall(
-      "ft_transfer",
-      {
-        receiver_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
-        amount: "1",
-        memo: null,
-      },
-      1000000000000n * 3n, // Gas:  3 TGas
-      1n, // Attached deposit: 1 yoctoNEAR
-    );
-
-    await accountA.signAndSendTransaction({
-      receiverId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      actions: Array(100)
-        .fill(null)
-        .map(() => action),
-    });
-
-    // Get the balance of account-b
-    const accountBBalance = await accountA.callFunction({
+    // Executor
+    const executor = new Executor(queue, {
+      rpcUrl: sandbox.rpcUrl,
+      accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: {
-        account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
-      },
+      privateKey: accountAKeyPair.toString(),
     });
-    console.log({ accountBBalance });
+    executor.start();
+
+    console.log("Executor started");
+
+    Array(1000)
+      .fill(null)
+      .forEach(() => {
+        queue.push({
+          receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
+          amount: "1",
+        });
+      });
+
+    console.log("Sandbox is running. Press Ctrl+C to stop...");
+    await new Promise((resolve) => {
+      process.on("SIGINT", () => {
+        console.log("\nReceived SIGINT signal");
+        resolve(undefined);
+      });
+    });
 
     console.log("Stopping the sandbox...");
     await sandbox.stop();
@@ -107,5 +113,6 @@ import { actionCreators } from "@near-js/transactions";
   } finally {
     console.log("Tearing down the sandbox...");
     await sandbox.tearDown();
+    console.log("Sandbox is stopped");
   }
 })();

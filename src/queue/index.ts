@@ -2,11 +2,19 @@ import type { Database } from "bun:sqlite";
 import type { TransferRequest, QueueItem } from "../types";
 import { QueueStatus } from "../types";
 
+export type QueueOptions = {
+  mergeExistingAccounts?: boolean;
+};
+
 export class Queue {
   private db: Database;
+  private options: QueueOptions;
 
-  constructor(db: Database) {
+  constructor(db: Database, options: QueueOptions = {}) {
     this.db = db;
+    this.options = {
+      mergeExistingAccounts: options.mergeExistingAccounts ?? true,
+    };
     this.initSchema();
   }
 
@@ -35,38 +43,41 @@ export class Queue {
     const now = Date.now();
 
     const tx = this.db.transaction(() => {
-      // Check if there's a pending transaction for the same account
-      const existing = this.db
-        .query(
-          "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND status = ? LIMIT 1",
-        )
-        .get(transfer.receiver_account_id, QueueStatus.PENDING) as {
-        id: number;
-        amount: string;
-      } | null;
+      if (this.options.mergeExistingAccounts) {
+        // Check if there's a pending transaction for the same account
+        const existing = this.db
+          .query(
+            "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND status = ? LIMIT 1",
+          )
+          .get(transfer.receiver_account_id, QueueStatus.PENDING) as {
+            id: number;
+            amount: string;
+          } | null;
 
-      if (existing) {
-        // Add amounts together (both are string numbers)
-        const newAmount = (
-          BigInt(existing.amount) + BigInt(transfer.amount)
-        ).toString();
-        this.db.run(
-          "UPDATE queue SET amount = ?, updated_at = ? WHERE id = ?",
-          [newAmount, now, existing.id],
-        );
-      } else {
-        // Create new entry
-        this.db.run(
-          "INSERT INTO queue (receiver_account_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-          [
-            transfer.receiver_account_id,
-            transfer.amount,
-            QueueStatus.PENDING,
-            now,
-            now,
-          ],
-        );
+        if (existing) {
+          // Add amounts together (both are string numbers)
+          const newAmount = (
+            BigInt(existing.amount) + BigInt(transfer.amount)
+          ).toString();
+          this.db.run(
+            "UPDATE queue SET amount = ?, updated_at = ? WHERE id = ?",
+            [newAmount, now, existing.id],
+          );
+          return;
+        }
       }
+
+      // Create new entry (either merging is disabled or no existing entry found)
+      this.db.run(
+        "INSERT INTO queue (receiver_account_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [
+          transfer.receiver_account_id,
+          transfer.amount,
+          QueueStatus.PENDING,
+          now,
+          now,
+        ],
+      );
     });
 
     tx();
