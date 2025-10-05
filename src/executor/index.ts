@@ -61,6 +61,7 @@ export class Executor {
 
   start() {
     if (this.isRunning) return;
+    this.queue.recover();
     this.isRunning = true;
     this.run();
   }
@@ -81,9 +82,6 @@ export class Executor {
     });
   }
 
-  private async checkTransactionStatus(txHash: string) {
-    const status = await this.jsonRpcProvider.txStatus(txHash, this.options.accountId)
-  }
 
   private async run() {
     while (this.isRunning) {
@@ -129,7 +127,7 @@ export class Executor {
         this.options.contractId,
         actions,
       );
-      const signedEncoded = signed.transaction.encode()
+      const signedEncoded = signed.transaction.encode();
       const signedHash = await sha256Bs58(signedEncoded);
 
       this.queue.markBatchProcessing(itemIds, signedHash, signedEncoded);

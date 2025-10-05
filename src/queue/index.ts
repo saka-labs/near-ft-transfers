@@ -209,11 +209,12 @@ export class Queue extends EventEmitter {
       .all(...ids) as QueueItem[];
   }
 
-  resetProcessingOnStartup() {
-    // Reset any PROCESSING items back to PENDING on startup (recovery mechanism)
+  recover() {
+    // Reset any PROCESSING and FAILED items back to PENDING on startup (recovery mechanism)
+    const now = Date.now();
     this.db.run(
-      "UPDATE queue SET status = ?, updated_at = ? WHERE status = ?",
-      [QueueStatus.PENDING, Date.now(), QueueStatus.PROCESSING],
+      "UPDATE queue SET status = ?, updated_at = ? WHERE status IN (?, ?)",
+      [QueueStatus.PENDING, now, QueueStatus.PROCESSING, QueueStatus.FAILED],
     );
   }
 

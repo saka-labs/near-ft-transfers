@@ -28,4 +28,5 @@ export type QueueItem = {
   retry_count: number
   error_message: string | null
   tx_hash: string | null
+  signed_tx: Uint8Array | null
 }
