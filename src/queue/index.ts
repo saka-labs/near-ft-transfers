@@ -46,7 +46,8 @@ export class Queue extends EventEmitter {
         updated_at INTEGER NOT NULL,
         retry_count INTEGER DEFAULT 0,
         error_message TEXT,
-        tx_hash TEXT
+        tx_hash TEXT,
+        signed_tx BLOB
       )
     `);
     // Index for efficient pending queries by status
@@ -129,27 +130,28 @@ export class Queue extends EventEmitter {
     return items;
   }
 
-  markProcessing(id: number, txHash: string) {
-    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?", [
+  markProcessing(id: number, txHash: string, signedTx: Uint8Array) {
+    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, signed_tx = ?, updated_at = ? WHERE id = ?", [
       QueueStatus.PROCESSING,
       txHash,
+      signedTx,
       Date.now(),
       id,
     ]);
   }
 
-  markBatchProcessing(ids: number[], txHash: string) {
+  markBatchProcessing(ids: number[], txHash: string, signedTx: Uint8Array) {
     if (ids.length === 0) return;
     const placeholders = ids.map(() => "?").join(",");
     this.db.run(
-      `UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id IN (${placeholders})`,
-      [QueueStatus.PROCESSING, txHash, Date.now(), ...ids],
+      `UPDATE queue SET status = ?, tx_hash = ?, signed_tx = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      [QueueStatus.PROCESSING, txHash, signedTx, Date.now(), ...ids],
     );
   }
 
   markSuccess(id: number, txHash: string) {
     const item = this.getById(id);
-    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?", [
+    this.db.run("UPDATE queue SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id = ?", [
       QueueStatus.SUCCESS,
       txHash,
       Date.now(),
@@ -165,7 +167,7 @@ export class Queue extends EventEmitter {
     const items = this.getByIds(ids);
     const placeholders = ids.map(() => "?").join(",");
     this.db.run(
-      `UPDATE queue SET status = ?, tx_hash = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      `UPDATE queue SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id IN (${placeholders})`,
       [QueueStatus.SUCCESS, txHash, Date.now(), ...ids],
     );
     items.forEach(item => this.emit('success', item, txHash));
@@ -174,7 +176,7 @@ export class Queue extends EventEmitter {
   markFailed(id: number, error: string) {
     const item = this.getById(id);
     this.db.run(
-      "UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE id = ?",
+      "UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, signed_tx = NULL, updated_at = ? WHERE id = ?",
       [QueueStatus.FAILED, error, Date.now(), id],
     );
     if (item) {
@@ -187,7 +189,7 @@ export class Queue extends EventEmitter {
     const items = this.getByIds(ids);
     const placeholders = ids.map(() => "?").join(",");
     this.db.run(
-      `UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, updated_at = ? WHERE id IN (${placeholders})`,
+      `UPDATE queue SET status = ?, retry_count = retry_count + 1, error_message = ?, signed_tx = NULL, updated_at = ? WHERE id IN (${placeholders})`,
       [QueueStatus.FAILED, error, Date.now(), ...ids],
     );
     items.forEach(item => this.emit('failed', item, error));

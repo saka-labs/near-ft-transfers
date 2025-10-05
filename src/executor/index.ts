@@ -81,6 +81,10 @@ export class Executor {
     });
   }
 
+  private async checkTransactionStatus(txHash: string) {
+    const status = await this.jsonRpcProvider.txStatus(txHash, this.options.accountId)
+  }
+
   private async run() {
     while (this.isRunning) {
       try {
@@ -125,10 +129,10 @@ export class Executor {
         this.options.contractId,
         actions,
       );
-      const signedHash = await sha256Bs58(signed.transaction.encode());
+      const signedEncoded = signed.transaction.encode()
+      const signedHash = await sha256Bs58(signedEncoded);
 
-      console.log("Signed hash:", signedHash);
-      this.queue.markBatchProcessing(itemIds, signedHash);
+      this.queue.markBatchProcessing(itemIds, signedHash, signedEncoded);
 
       const result = await this.jsonRpcProvider.sendTransaction(signed);
 
