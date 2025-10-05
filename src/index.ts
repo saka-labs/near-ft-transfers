@@ -8,9 +8,6 @@ import { Queue } from "./queue";
 const db = new Database(":memory:");
 const queue = new Queue(db);
 
-// Reset any PROCESSING items back to PENDING on startup (recovery mechanism)
-queue.resetProcessingOnStartup();
-
 const executor = new Executor(queue, {
   rpcUrl: process.env.NEAR_RPC_URL!,
   accountId: process.env.NEAR_ACCOUNT_ID!,
@@ -31,11 +28,15 @@ app.post("/transfer", async (c) => {
 
   const transferId = queue.push(result.data);
 
-  return c.json({
-    success: true,
-    transfer_id: transferId,
-    message: "Transfer queued successfully. Use /transfer/:id to check status and get transaction hash once processed."
-  }, 200);
+  return c.json(
+    {
+      success: true,
+      transfer_id: transferId,
+      message:
+        "Transfer queued successfully. Use /transfer/:id to check status and get transaction hash once processed.",
+    },
+    200,
+  );
 });
 
 app.post("/transfers", async (c) => {
@@ -55,11 +56,15 @@ app.post("/transfers", async (c) => {
     transferIds.push(transferId);
   }
 
-  return c.json({
-    success: true,
-    transfer_ids: transferIds,
-    message: "Transfers queued successfully. Use /transfer/:id to check status and get transaction hash once processed."
-  }, 200);
+  return c.json(
+    {
+      success: true,
+      transfer_ids: transferIds,
+      message:
+        "Transfers queued successfully. Use /transfer/:id to check status and get transaction hash once processed.",
+    },
+    200,
+  );
 });
 
 app.get("/transfer/:id", async (c) => {
@@ -69,23 +74,46 @@ app.get("/transfer/:id", async (c) => {
     return c.json({ error: "Invalid transfer ID" }, 400);
   }
 
-  const transfer = queue.getById(id);
+  const item = queue.getById(id);
 
-  if (!transfer) {
+  if (!item) {
     return c.json({ error: "Transfer not found" }, 404);
   }
 
-  return c.json({
-    id: transfer.id,
-    receiver_account_id: transfer.receiver_account_id,
-    amount: transfer.amount,
-    status: transfer.status,
-    tx_hash: transfer.tx_hash,
-    error_message: transfer.error_message,
-    retry_count: transfer.retry_count,
-    created_at: transfer.created_at,
-    updated_at: transfer.updated_at,
-  }, 200);
+  // Determine status and tx_hash based on current design
+  let status: string;
+  let tx_hash: string | null = null;
+
+  if (item.is_stalled) {
+    status = "stalled";
+  } else if (item.batch_id === null) {
+    status = "pending";
+  } else {
+    // Get batch transaction info
+    const batchInfo = queue.getBatchTransactionById(item.batch_id);
+    if (batchInfo) {
+      status = batchInfo.status;
+      tx_hash = batchInfo.tx_hash;
+    } else {
+      status = "unknown";
+    }
+  }
+
+  return c.json(
+    {
+      id: item.id,
+      receiver_account_id: item.receiver_account_id,
+      amount: item.amount,
+      status,
+      tx_hash,
+      error_message: item.error_message,
+      retry_count: item.retry_count,
+      is_stalled: item.is_stalled === 1,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+    },
+    200,
+  );
 });
 
 export default app;

@@ -226,6 +226,12 @@ export class Queue extends EventEmitter {
       .get(id) as QueueItem | null;
   }
 
+  getBatchTransactionById(batchId: number): { status: string; tx_hash: string } | null {
+    return this.db
+      .query("SELECT status, tx_hash FROM batch_transactions WHERE id = ?")
+      .get(batchId) as { status: string; tx_hash: string } | null;
+  }
+
   getByIds(ids: number[]): QueueItem[] {
     if (ids.length === 0) return [];
     const placeholders = ids.map(() => "?").join(",");

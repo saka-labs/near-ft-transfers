@@ -76,25 +76,25 @@ export class Executor extends EventEmitter {
 
   async start() {
     if (this.isRunning) return;
-    await this.recoverPendingTransactions();
+    await this.recoverProcessingTransactions();
     this.queue.recover();
     this.isRunning = true;
     this.run();
   }
 
-  private async recoverPendingTransactions() {
-    const pendingTxs = this.queue.getPendingSignedTransactions();
+  private async recoverProcessingTransactions() {
+    const processingTxs = this.queue.getPendingSignedTransactions();
 
-    if (pendingTxs.length === 0) {
+    if (processingTxs.length === 0) {
       console.log("No pending signed transactions to recover");
       return;
     }
 
     console.log(
-      `Recovering ${pendingTxs.length} pending signed transactions...`,
+      `Recovering ${processingTxs.length} processing signed transactions...`,
     );
 
-    for (const tx of pendingTxs) {
+    for (const tx of processingTxs) {
       try {
         console.log(
           `Re-broadcasting transaction ${tx.tx_hash} for queue items [${tx.queue_ids.join(", ")}]`,
