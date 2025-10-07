@@ -6,6 +6,10 @@ export const TransferRequestSchema = z.object({
 });
 export type TransferRequest = z.infer<typeof TransferRequestSchema>;
 
+export type TransferRequestWithDeposit = TransferRequest & {
+  has_storage_deposit?: boolean;
+};
+
 export const TransfersRequestSchema = z.array(TransferRequestSchema);
 export type TransfersRequest = z.infer<typeof TransfersRequestSchema>;
 
@@ -28,6 +32,7 @@ export type QueueItem = {
   error_message: string | null;
   batch_id: number | null;
   is_stalled: number; // 0 = false, 1 = true (SQLite boolean)
+  has_storage_deposit: number; // 0 = false, 1 = true (SQLite boolean)
 };
 
 export type TransactionStatus = {
@@ -40,3 +45,10 @@ export type TransactionStatus = {
     InvalidTxError?: any;
   };
 };
+
+// Re-export validation types for convenience
+export type {
+  ValidationResult,
+  BatchValidationResult,
+  ValidatorOptions,
+} from "./validation";

@@ -12,10 +12,12 @@ import {
   TransfersListResponseSchema,
   UnstallResponseSchema,
   ErrorResponseSchema,
+  ValidationErrorResponseSchema,
   TransfersQuerySchema,
   TransferIdParamSchema,
 } from "./schemas";
 import { swaggerUI } from "@hono/swagger-ui";
+import { AccountValidator } from "./validation";
 
 // TODO: This should not use memory in production
 const db = new Database(":memory:");
@@ -28,6 +30,16 @@ const executor = new Executor(queue, {
   privateKey: process.env.NEAR_PRIVATE_KEY!,
 });
 executor.start();
+
+const validator = new AccountValidator(
+  process.env.NEAR_RPC_URL!,
+  process.env.NEAR_CONTRACT_ID!,
+  {
+    cacheTTL: 300000, // 5 minutes
+    timeout: 10000, // 10 seconds
+    skipStorageCheck: false, // Set to true to skip storage deposit validation
+  },
+);
 
 const app = new OpenAPIHono();
 
@@ -56,14 +68,29 @@ const createTransferRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Validation error - account does not exist",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 app.openapi(createTransferRoute, async (c) => {
   const body = c.req.valid("json");
-  // TODO: validate accountId should be a valid account and already deposited funds
+  const validation = await validator.validate(body.receiver_account_id);
 
-  const transferId = queue.push(body);
+  if (!validation.accountExists) {
+    return c.json({ error: validation.error || "Account does not exist" }, 400);
+  }
+
+  const transferId = queue.push({
+    ...body,
+    has_storage_deposit: validation.hasStorageDeposit || false,
+  });
 
   return c.json({
     success: true,
@@ -98,17 +125,50 @@ const createTransfersRoute = createRoute({
         },
       },
     },
+    400: {
+      description: "Validation error - one or more accounts are invalid",
+      content: {
+        "application/json": {
+          schema: ValidationErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 app.openapi(createTransfersRoute, async (c) => {
   const transfers = c.req.valid("json");
-  // TODO: validate accountId should be a valid account and already deposited funds
+  const uniqueAccountIds = [
+    ...new Set(transfers.map((t) => t.receiver_account_id)),
+  ];
+
+  const validations = await validator.validateBatch(uniqueAccountIds);
+
+  const nonExistentAccounts = Object.entries(validations)
+    .filter(([_, result]) => !result.accountExists)
+    .map(([accountId, result]) => ({ accountId, error: result.error }));
+
+  if (nonExistentAccounts.length > 0) {
+    return c.json(
+      {
+        error: "One or more accounts do not exist on NEAR",
+        invalid_accounts: nonExistentAccounts,
+      },
+      400,
+    );
+  }
 
   const transferIds: number[] = [];
 
   for (const transfer of transfers) {
-    const transferId = queue.push(transfer);
+    const validation = validations[transfer.receiver_account_id];
+    const hasDeposit = validation?.hasStorageDeposit || false;
+
+    const transferId = queue.push({
+      ...transfer,
+      has_storage_deposit: hasDeposit,
+    });
+
     transferIds.push(transferId);
   }
 
@@ -184,6 +244,7 @@ app.openapi(getTransfersRoute, async (c) => {
       error_message: item.error_message,
       retry_count: item.retry_count,
       is_stalled: item.is_stalled === 1,
+      has_storage_deposit: item.has_storage_deposit === 1,
       created_at: item.created_at,
       updated_at: item.updated_at,
     };
@@ -259,6 +320,7 @@ app.openapi(getTransferRoute, async (c) => {
     error_message: item.error_message,
     retry_count: item.retry_count,
     is_stalled: item.is_stalled === 1,
+    has_storage_deposit: item.has_storage_deposit === 1,
     created_at: item.created_at,
     updated_at: item.updated_at,
   }, 200);

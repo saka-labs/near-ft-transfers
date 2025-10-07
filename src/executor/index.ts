@@ -179,14 +179,43 @@ export class Executor extends EventEmitter {
   }
 
   private async processBatch(items: QueueItem[]) {
-    const itemIds = items.map((item) => item.id);
+    // Filter items to fit within 100 action limit
+    // Each item needs 1 action (ft_transfer) or 2 actions (storage_deposit + ft_transfer)
+    const MAX_ACTIONS = 100;
+    let actionCount = 0;
+    const itemsToProcess: QueueItem[] = [];
+
+    for (const item of items) {
+      const actionsNeeded = item.has_storage_deposit ? 1 : 2;
+      if (actionCount + actionsNeeded <= MAX_ACTIONS) {
+        itemsToProcess.push(item);
+        actionCount += actionsNeeded;
+      } else {
+        // Can't fit more items, stop here
+        break;
+      }
+    }
+
+    // If we couldn't process any items due to action limit, this shouldn't happen
+    // but handle it gracefully
+    if (itemsToProcess.length === 0) {
+      console.warn("No items could fit in batch due to action limit");
+      return;
+    }
+
+    const itemIds = itemsToProcess.map((item) => item.id);
     let batchId;
 
     try {
       console.info(`Processing batch of ${items.length} items...`);
 
-      const actions = items.map((item) =>
-        this.createAction(item.receiver_account_id, item.amount),
+      // Create actions for each item, including storage deposit if needed
+      const actions = itemsToProcess.flatMap((item) =>
+        this.createActionsForItem(
+          item.receiver_account_id,
+          item.amount,
+          Boolean(item.has_storage_deposit),
+        ),
       );
 
       const signed = await this.account.createSignedTransaction(
@@ -276,16 +305,41 @@ export class Executor extends EventEmitter {
     return errorMessage;
   }
 
-  private createAction(receiverId: string, amount: string) {
-    return actionCreators.functionCall(
-      "ft_transfer",
-      {
-        receiver_id: receiverId,
-        amount: amount,
-        memo: null, // TODO: handle memo
-      },
-      1000000000000n * 3n, // Gas:  3 TGas, max TGas per transaction is 300TGas, max action per transaction is 100, 300 / 100 = 3 TGas
-      1n, // Attached deposit: 1 yoctoNEAR
+  private createActionsForItem(
+    receiverId: string,
+    amount: string,
+    hasStorageDeposit: boolean,
+  ) {
+    const actions = [];
+
+    if (!hasStorageDeposit) {
+      actions.push(
+        actionCreators.functionCall(
+          "storage_deposit",
+          {
+            account_id: receiverId,
+            registration_only: true,
+          },
+          1000000000000n * 3n, // Gas:  3 TGas
+          1250000000000000000000n, // 0.00125 NEAR (typical NEP-141 storage deposit)
+        ),
+      );
+    }
+
+    // Add ft_transfer action
+    actions.push(
+      actionCreators.functionCall(
+        "ft_transfer",
+        {
+          receiver_id: receiverId,
+          amount: amount,
+          memo: null,
+        },
+        1000000000000n * 3n, // Gas:  3 TGas
+        1n, // 1 yoctoNEAR
+      ),
     );
+
+    return actions;
   }
 }
