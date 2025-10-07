@@ -39,7 +39,8 @@ export class Queue extends EventEmitter {
         retry_count INTEGER DEFAULT 0,
         error_message TEXT,
         batch_id INTEGER,
-        is_stalled INTEGER DEFAULT 0
+        is_stalled INTEGER DEFAULT 0,
+        has_storage_deposit INTEGER DEFAULT 0
       )
     `);
     // Index for efficient lookup by batch_id
@@ -68,8 +69,9 @@ export class Queue extends EventEmitter {
     );
   }
 
-  push(transfer: TransferRequest): number {
+  push(transfer: TransferRequest & { has_storage_deposit?: boolean }): number {
     const now = Date.now();
+    const hasStorageDeposit = transfer.has_storage_deposit ?? false;
 
     const tx = this.db.transaction(() => {
       if (this.options.mergeExistingAccounts) {
@@ -79,9 +81,9 @@ export class Queue extends EventEmitter {
             "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND batch_id IS NULL LIMIT 1",
           )
           .get(transfer.receiver_account_id) as {
-          id: number;
-          amount: string;
-        } | null;
+            id: number;
+            amount: string;
+          } | null;
 
         if (existing) {
           // Add amounts together (both are string numbers)
@@ -89,8 +91,8 @@ export class Queue extends EventEmitter {
             BigInt(existing.amount) + BigInt(transfer.amount)
           ).toString();
           this.db.run(
-            "UPDATE queue SET amount = ?, updated_at = ? WHERE id = ?",
-            [newAmount, now, existing.id],
+            "UPDATE queue SET amount = ?, has_storage_deposit = ?, updated_at = ? WHERE id = ?",
+            [newAmount, hasStorageDeposit ? 1 : 0, now, existing.id],
           );
           return existing.id;
         }
@@ -98,8 +100,14 @@ export class Queue extends EventEmitter {
 
       // Create new entry (either merging is disabled or no existing entry found)
       this.db.run(
-        "INSERT INTO queue (receiver_account_id, amount, created_at, updated_at) VALUES (?, ?, ?, ?)",
-        [transfer.receiver_account_id, transfer.amount, now, now],
+        "INSERT INTO queue (receiver_account_id, amount, has_storage_deposit, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [
+          transfer.receiver_account_id,
+          transfer.amount,
+          hasStorageDeposit ? 1 : 0,
+          now,
+          now,
+        ],
       );
       return this.db.query("SELECT last_insert_rowid() as id").get() as {
         id: number;
@@ -168,6 +176,12 @@ export class Queue extends EventEmitter {
       this.db.run(
         "UPDATE batch_transactions SET status = ?, tx_hash = ?, signed_tx = NULL, updated_at = ? WHERE id = ?",
         [QueueStatus.SUCCESS, txHash, now, batchId],
+      );
+
+      // Mark all items in the batch as having storage deposit (since we just successfully processed them)
+      this.db.run(
+        "UPDATE queue SET has_storage_deposit = 1 WHERE batch_id = ?",
+        [batchId],
       );
     });
 
@@ -298,10 +312,10 @@ export class Queue extends EventEmitter {
         "SELECT id, tx_hash, signed_tx FROM batch_transactions WHERE status = ? AND signed_tx IS NOT NULL",
       )
       .all(QueueStatus.PROCESSING) as Array<{
-      id: number;
-      tx_hash: string;
-      signed_tx: Uint8Array;
-    }>;
+        id: number;
+        tx_hash: string;
+        signed_tx: Uint8Array;
+      }>;
 
     // For each batch transaction, get the associated queue item IDs
     return batchTxs.map((tx) => {

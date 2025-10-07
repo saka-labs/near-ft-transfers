@@ -42,6 +42,7 @@ export const TransferItemSchema = z.object({
   error_message: z.string().nullable().openapi({ example: null }),
   retry_count: z.number().openapi({ example: 0 }),
   is_stalled: z.boolean().openapi({ example: false }),
+  has_storage_deposit: z.boolean().openapi({ example: true }),
   created_at: z.number().openapi({ example: 1704067200000 }),
   updated_at: z.number().openapi({ example: 1704067200000 }),
 });
@@ -72,6 +73,21 @@ export const UnstallResponseSchema = z.object({
 export const ErrorResponseSchema = z.object({
   error: z.string()
 }).openapi({ description: "Error response" });
+
+export const ValidationErrorResponseSchema = z.object({
+  error: z.string(),
+  invalid_accounts: z
+    .array(
+      z.object({
+        accountId: z.string(),
+        error: z.string().optional(),
+      }),
+    )
+    .optional(),
+}).openapi({
+  description:
+    "Validation error response with details about invalid accounts",
+});
 
 // Query parameter schemas
 export const TransfersQuerySchema = z.object({

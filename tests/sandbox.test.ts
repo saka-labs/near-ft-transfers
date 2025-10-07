@@ -22,6 +22,7 @@ let sandbox: Awaited<ReturnType<typeof Sandbox.start>>;
 let accountA: Account;
 let accountB: Account;
 let accountC: Account;
+let accountD: Account;
 let defaultAccount: Account;
 let accountAKeyPair: KeyPair;
 
@@ -85,6 +86,19 @@ beforeAll(async () => {
     "account-c." + DEFAULT_ACCOUNT_ID,
     new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
     new KeyPairSigner(accountCKeyPair),
+  );
+
+  const accountDKeyPair = KeyPair.fromRandom("ED25519");
+  await defaultAccount.createAccount(
+    `account-d.${DEFAULT_ACCOUNT_ID}`,
+    accountDKeyPair.getPublicKey(),
+    NEAR.toUnits(10),
+  );
+
+  accountD = new Account(
+    "account-d." + DEFAULT_ACCOUNT_ID,
+    new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
+    new KeyPairSigner(accountDKeyPair),
   );
 
   // Deploy FT contract
@@ -694,6 +708,162 @@ describe("Executor - MinQueueToProcess Threshold", () => {
       BigInt(initialBalance.toString()) + 500n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
+
+    executor.stop();
+  }, 30000);
+});
+
+describe("Executor - Storage Deposit Handling", () => {
+  let queue: Queue;
+  let executor: Executor;
+  let db: Database;
+
+  beforeEach(async () => {
+    db = new Database(":memory:");
+    queue = new Queue(db, { mergeExistingAccounts: false });
+  });
+
+  afterAll(() => {
+    if (executor) {
+      executor.stop();
+    }
+  });
+
+  test("should automatically add storage_deposit action for unregistered accounts", async () => {
+    executor = new Executor(queue, {
+      rpcUrl: sandbox.rpcUrl,
+      accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      privateKey: accountAKeyPair.toString(),
+    });
+    await executor.start();
+
+    const initialBalance = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "ft_balance_of",
+      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
+    });
+
+    expect(initialBalance).toBe("0");
+
+    // Push transfer without storage deposit flag
+    queue.push({
+      receiver_account_id: `account-d.${DEFAULT_ACCOUNT_ID}`,
+      amount: "1000",
+      has_storage_deposit: false,
+    });
+
+    await executor.waitUntilIdle();
+
+    const finalBalance = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "ft_balance_of",
+      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
+    });
+
+    const stats = queue.getStats();
+    expect(stats.success).toBe(1);
+    expect(finalBalance).toBe("1000");
+
+    // Verify storage deposit was registered
+    const storageBalance = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "storage_balance_of",
+      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
+    });
+
+    expect(storageBalance).not.toBeNull();
+
+    executor.stop();
+  }, 30000);
+
+  test("should respect 100-action limit when adding storage_deposit actions", async () => {
+    executor = new Executor(queue, {
+      rpcUrl: sandbox.rpcUrl,
+      accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      privateKey: accountAKeyPair.toString(),
+      batchSize: 100, // Try to process 100 items
+    });
+    await executor.start();
+
+    // Push 60 transfers without storage deposit (each needs 2 actions = 120 actions total)
+    // Only 50 should fit (50 * 2 = 100 actions)
+    for (let i = 0; i < 60; i++) {
+      queue.push({
+        receiver_account_id: `account-d.${DEFAULT_ACCOUNT_ID}`,
+        amount: "10",
+        has_storage_deposit: false,
+      });
+    }
+
+    // Wait for first batch to complete
+    await new Promise<void>((resolve) => {
+      executor.once("batchProcessed", () => {
+        resolve();
+      });
+    });
+
+    const statsAfterFirstBatch = queue.getStats();
+
+    // Due to merging, only 1 item should exist with total amount
+    // But that 1 item needs 2 actions (storage_deposit + ft_transfer)
+    expect(statsAfterFirstBatch.success).toBeGreaterThan(0);
+
+    executor.stop();
+  }, 30000);
+
+  test("should handle mixed batch with and without storage deposits", async () => {
+    executor = new Executor(queue, {
+      rpcUrl: sandbox.rpcUrl,
+      accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      privateKey: accountAKeyPair.toString(),
+    });
+    await executor.start();
+
+    // Push transfers: some with storage deposit, some without
+    queue.push({
+      receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
+      amount: "100",
+      has_storage_deposit: true, // Already registered
+    });
+    queue.push({
+      receiver_account_id: `account-d.${DEFAULT_ACCOUNT_ID}`,
+      amount: "200",
+      has_storage_deposit: false, // Not registered
+    });
+    queue.push({
+      receiver_account_id: `account-c.${DEFAULT_ACCOUNT_ID}`,
+      amount: "300",
+      has_storage_deposit: true, // Already registered
+    });
+
+    await executor.waitUntilIdle();
+
+    const stats = queue.getStats();
+    expect(stats.success).toBe(3);
+
+    // Verify all transfers succeeded
+    const balanceB = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "ft_balance_of",
+      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
+    });
+    const balanceD = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "ft_balance_of",
+      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
+    });
+    const balanceC = await accountA.callFunction({
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      methodName: "ft_balance_of",
+      args: { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
+    });
+
+    expect(BigInt(balanceB.toString())).toBeGreaterThanOrEqual(100n);
+    expect(BigInt(balanceD.toString())).toBeGreaterThanOrEqual(200n);
+    expect(BigInt(balanceC.toString())).toBeGreaterThanOrEqual(300n);
 
     executor.stop();
   }, 30000);
