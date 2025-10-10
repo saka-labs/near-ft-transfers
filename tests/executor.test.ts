@@ -16,7 +16,6 @@ import {
   afterAll,
   beforeEach,
 } from "bun:test";
-import { sleep } from "bun";
 
 let sandbox: Awaited<ReturnType<typeof Sandbox.start>>;
 let accountA: Account;
@@ -427,6 +426,7 @@ describe("Executor - Batch Failure and Retry", () => {
     queue.push({
       receiver_account_id: `nonexistent.${DEFAULT_ACCOUNT_ID}`,
       amount: "100",
+      has_storage_deposit: true,
     });
 
     executor = new Executor(queue, {
@@ -439,7 +439,7 @@ describe("Executor - Batch Failure and Retry", () => {
 
     // Wait for at least one batch failure event
     const batchFailedPromise = new Promise<void>((resolve) => {
-      executor.once('batchFailed', () => {
+      executor.once("batchFailed", () => {
         resolve();
       });
     });
@@ -459,6 +459,7 @@ describe("Executor - Batch Failure and Retry", () => {
     queue.push({
       receiver_account_id: `nonexistent.${DEFAULT_ACCOUNT_ID}`,
       amount: "100",
+      has_storage_deposit: true,
     });
 
     executor = new Executor(queue, {
@@ -471,7 +472,7 @@ describe("Executor - Batch Failure and Retry", () => {
 
     // Wait for batch failure event
     const batchFailedPromise = new Promise<void>((resolve) => {
-      executor.once('batchFailed', () => {
+      executor.once("batchFailed", () => {
         resolve();
       });
     });
@@ -490,6 +491,7 @@ describe("Executor - Batch Failure and Retry", () => {
       .all();
 
     expect(failedBatches).toHaveLength(0);
+    expect(processingBatches).toHaveLength(0);
 
     executor.stop();
   }, 30000);
@@ -653,7 +655,7 @@ describe("Executor - MinQueueToProcess Threshold", () => {
 
     // Wait for at least one loop to complete to verify nothing was processed
     const loopCompletedPromise = new Promise<void>((resolve) => {
-      executor.once('loopCompleted', () => {
+      executor.once("loopCompleted", () => {
         resolve();
       });
     });

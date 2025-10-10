@@ -3,8 +3,8 @@ import { Queue } from "../src/queue";
 import type { TransferRequest } from "../src/types";
 
 // Configuration
-const PUSH_COUNT = Number(process.env.BENCH_PUSH_COUNT) || 10;
-const PEEK_COUNT = Number(process.env.BENCH_PEEK_COUNT) || 10;
+const PUSH_COUNT = Number(process.env.BENCH_PUSH_COUNT) || 100000;
+const PEEK_COUNT = Number(process.env.BENCH_PEEK_COUNT) || 100;
 
 const db = new Database(":memory:");
 const queue = new Queue(db);
@@ -13,7 +13,7 @@ const queue = new Queue(db);
 console.time(`Push ${PUSH_COUNT} items`);
 for (let i = 0; i < PUSH_COUNT; i++) {
   const transfer: TransferRequest = {
-    receiver_account_id: `user${i}.testnet`,
+    receiver_account_id: `user${i}.near`,
     amount: `${i}000000000000000000000000`,
   };
   queue.push(transfer);

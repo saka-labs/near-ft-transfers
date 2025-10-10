@@ -6,8 +6,9 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run src/index.ts --watch",
-    "test:sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun test tests/sandbox.test.ts",
-    "test:sandbox:bench": "mkdir -p .tmp && TMPDIR=.tmp bun test tests/sandbox.bench.test.ts"
+    "test:executor": "mkdir -p .tmp && TMPDIR=.tmp bun test tests/executor.test.ts",
+    "bench:executor:sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun run bench/executor-sandbox.bench.ts",
+    "bench:queue": "mkdir -p .tmp && TMPDIR=.tmp bun run bench/queue.bench.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

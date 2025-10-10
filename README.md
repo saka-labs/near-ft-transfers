@@ -315,19 +315,80 @@ The validator accepts the following options:
 
 ## Testing
 
+### Unit Tests
+
 ```bash
+# Run all tests
+bun test
+
 # Run queue tests
-bun test src/queue/queue.test.ts
+bun test tests/queue.test.ts
 
 # Run validation tests (requires NEAR RPC access)
-bun test src/validation.test.ts
+bun test tests/validation.test.ts
 
-# Run queue benchmark
-bun run src/queue/queue.bench.ts
+# Run retry logic tests
+bun test tests/queue-retry.test.ts
 
-# Test with NEAR sandbox
-bun run test:sandbox
+# Run executor tests (with NEAR sandbox)
+bun run test:executor
 ```
+
+### API Testing Scripts
+
+The `scripts/` directory contains utility scripts for testing the API endpoints:
+
+```bash
+# Test single transfer endpoint (sends 10 sequential requests)
+./scripts/test-transfer.sh
+
+# Test batch transfers endpoint (sends 1 request with 10 transfers)
+./scripts/test-transfers.sh
+
+# Custom configuration
+ITERATIONS=20 AMOUNT="5000000000000000000000000" ./scripts/test-transfer.sh
+```
+
+See [scripts/README.md](scripts/README.md) for detailed documentation on the testing scripts.
+
+## Benchmarking
+
+Run performance benchmarks to measure throughput and processing times:
+
+```bash
+# Run default benchmark (1000 transfers)
+bun run bench
+
+# Run with custom transfer count
+TRANSFER_COUNT=5000 bun run bench
+
+# Run with custom batch size
+BATCH_SIZE=50 bun run bench
+
+# Run with custom RPC port
+RPC_PORT=55555 bun run bench
+
+# Combine options
+TRANSFER_COUNT=2000 BATCH_SIZE=100 bun run bench
+```
+
+The benchmark script (`bench/sandbox.bench.ts`) will:
+- Start a local NEAR sandbox
+- Deploy a test FT contract
+- Set up test accounts
+- Process the specified number of transfers
+- Report detailed performance metrics:
+  - Queue push time
+  - Processing time
+  - Total time
+  - Average time per transfer
+  - Throughput (transfers/sec)
+  - Balance verification
+
+**Environment Variables:**
+- `TRANSFER_COUNT` - Number of transfers to process (default: 1000)
+- `BATCH_SIZE` - Executor batch size (default: 100)
+- `RPC_PORT` - Sandbox RPC port (default: 45555)
 
 ## Database Schema
 

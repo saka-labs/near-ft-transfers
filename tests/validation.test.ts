@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { AccountValidator } from "./validation";
+import { AccountValidator } from "../src/validation";
 
 // Note: These tests require a live NEAR RPC endpoint
 // Update these values for your testing environment

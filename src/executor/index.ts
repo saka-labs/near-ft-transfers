@@ -27,9 +27,18 @@ export type ExecutorEvents = {
 };
 
 export interface Executor {
-  on<K extends keyof ExecutorEvents>(event: K, listener: ExecutorEvents[K]): this;
-  once<K extends keyof ExecutorEvents>(event: K, listener: ExecutorEvents[K]): this;
-  emit<K extends keyof ExecutorEvents>(event: K, ...args: Parameters<ExecutorEvents[K]>): boolean;
+  on<K extends keyof ExecutorEvents>(
+    event: K,
+    listener: ExecutorEvents[K],
+  ): this;
+  once<K extends keyof ExecutorEvents>(
+    event: K,
+    listener: ExecutorEvents[K],
+  ): this;
+  emit<K extends keyof ExecutorEvents>(
+    event: K,
+    ...args: Parameters<ExecutorEvents[K]>
+  ): boolean;
 }
 
 export class Executor extends EventEmitter {
@@ -93,9 +102,7 @@ export class Executor extends EventEmitter {
       return;
     }
 
-    console.info(
-      `Recovering ${batchTxs.length} batch transactions...`,
-    );
+    console.info(`Recovering ${batchTxs.length} batch transactions...`);
 
     for (const batch of batchTxs) {
       try {
@@ -159,7 +166,7 @@ export class Executor extends EventEmitter {
         const processTime = Date.now() - startTime;
 
         // Emit loop completed event
-        this.emit('loopCompleted');
+        this.emit("loopCompleted");
 
         // Check if queue is idle and notify waiters
         if (
@@ -235,11 +242,10 @@ export class Executor extends EventEmitter {
       );
 
       const result = await this.jsonRpcProvider.sendTransaction(signed);
-
       // Validate transaction result
       const validation = this.validateTransactionResult(result, batchId, items);
       if (!validation.isValid) {
-        this.emit('batchFailed', items.length, validation.errorMessage!);
+        this.emit("batchFailed", items.length, validation.errorMessage!);
         return;
       }
 
@@ -248,10 +254,14 @@ export class Executor extends EventEmitter {
       console.info("Transaction hash:", txHash);
 
       this.queue.markBatchSuccess(batchId, txHash);
-      this.emit('batchProcessed', items.length, true);
+      this.emit("batchProcessed", items.length, true);
     } catch (error) {
-      const errorMessage = this.handleBroadcastError(error, batchId, "Failed to process batch");
-      this.emit('batchFailed', items.length, errorMessage);
+      const errorMessage = this.handleBroadcastError(
+        error,
+        batchId,
+        "Failed to process batch",
+      );
+      this.emit("batchFailed", items.length, errorMessage);
     }
   }
 
@@ -276,9 +286,17 @@ export class Executor extends EventEmitter {
         const item = items[actionIndex]!;
         // Mark the specific item as stalled
         this.queue.markItemStalled(item.id, errorMessage);
-        this.queue.recoverFailedBatch(batchId, undefined, this.options.maxRetries);
+        this.queue.recoverFailedBatch(
+          batchId,
+          undefined,
+          this.options.maxRetries,
+        );
       } else {
-        this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
+        this.queue.recoverFailedBatch(
+          batchId,
+          errorMessage,
+          this.options.maxRetries,
+        );
       }
 
       return { isValid: false, errorMessage };
@@ -286,7 +304,11 @@ export class Executor extends EventEmitter {
 
     if (status.Failure.InvalidTxError) {
       const errorMessage = JSON.stringify(status.Failure.InvalidTxError);
-      this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
+      this.queue.recoverFailedBatch(
+        batchId,
+        errorMessage,
+        this.options.maxRetries,
+      );
       return { isValid: false, errorMessage };
     }
 
@@ -302,7 +324,11 @@ export class Executor extends EventEmitter {
     console.error(`${context}:`, error);
 
     if (batchId) {
-      this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
+      this.queue.recoverFailedBatch(
+        batchId,
+        errorMessage,
+        this.options.maxRetries,
+      );
     }
 
     return errorMessage;
