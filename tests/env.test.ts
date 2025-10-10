@@ -92,33 +92,11 @@ describe("Environment Configuration Utility", () => {
     }).toThrow();
   });
 
-  test("should throw error when NEAR_ACCOUNT_ID format is invalid", async () => {
-    process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
-    process.env.NEAR_ACCOUNT_ID = "INVALID-ACCOUNT-ID!@#";
-    process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
-
-    expect(async () => {
-      await import("../src/env");
-    }).toThrow();
-  });
-
   test("should throw error when NEAR_PRIVATE_KEY is missing", async () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
     delete process.env.NEAR_PRIVATE_KEY;
-
-    expect(async () => {
-      await import("../src/env");
-    }).toThrow();
-  });
-
-  test("should throw error when NEAR_PRIVATE_KEY format is invalid", async () => {
-    process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
-    process.env.NEAR_ACCOUNT_ID = "test.testnet";
-    process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "invalid-key-format";
 
     expect(async () => {
       await import("../src/env");

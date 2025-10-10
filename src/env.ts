@@ -36,6 +36,13 @@ const EnvSchema = z.object({
       return parsed;
     }),
 
+  // Database configuration
+  DATABASE_PATH: z
+    .string()
+    .optional()
+    .default(":memory:")
+    .describe("Database file path. Use ':memory:' for in-memory database (default)"),
+
   // Optional: Node environment
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -51,6 +58,7 @@ export interface ParsedEnvConfig {
   nearContractId: string;
   nearPrivateKey: string;
   maxRetries: number;
+  databasePath: string;
   nodeEnv: "development" | "production" | "test";
 }
 
@@ -63,6 +71,7 @@ function validateEnv(): ParsedEnvConfig {
       NEAR_CONTRACT_ID: process.env.NEAR_CONTRACT_ID,
       NEAR_PRIVATE_KEY: process.env.NEAR_PRIVATE_KEY,
       MAX_RETRIES: process.env.MAX_RETRIES,
+      DATABASE_PATH: process.env.DATABASE_PATH,
       NODE_ENV: process.env.NODE_ENV,
     });
 
@@ -73,6 +82,7 @@ function validateEnv(): ParsedEnvConfig {
       nearContractId: validated.NEAR_CONTRACT_ID,
       nearPrivateKey: validated.NEAR_PRIVATE_KEY,
       maxRetries: validated.MAX_RETRIES,
+      databasePath: validated.DATABASE_PATH,
       nodeEnv: validated.NODE_ENV,
     };
   } catch (error) {
@@ -109,5 +119,6 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   nearContractId: env.nearContractId,
   nearPrivateKey: "***REDACTED***",
   maxRetries: env.maxRetries,
+  databasePath: env.databasePath,
   nodeEnv: env.nodeEnv,
 });

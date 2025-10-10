@@ -20,8 +20,7 @@ import { swaggerUI } from "@hono/swagger-ui";
 import { AccountValidator } from "./validation";
 import { env } from "./env";
 
-// TODO: This should not use memory in production
-const db = new Database(":memory:");
+const db = new Database(env.databasePath);
 const queue = new Queue(db);
 
 const executor = new Executor(queue, {
