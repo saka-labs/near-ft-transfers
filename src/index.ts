@@ -18,23 +18,24 @@ import {
 } from "./schemas";
 import { swaggerUI } from "@hono/swagger-ui";
 import { AccountValidator } from "./validation";
+import { env } from "./env";
 
 // TODO: This should not use memory in production
 const db = new Database(":memory:");
 const queue = new Queue(db);
 
 const executor = new Executor(queue, {
-  rpcUrl: process.env.NEAR_RPC_URL!,
-  accountId: process.env.NEAR_ACCOUNT_ID!,
-  contractId: process.env.NEAR_CONTRACT_ID!,
-  privateKey: process.env.NEAR_PRIVATE_KEY!,
-  maxRetries: process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES) : 5,
+  rpcUrl: env.nearRpcUrl,
+  accountId: env.nearAccountId,
+  contractId: env.nearContractId,
+  privateKey: env.nearPrivateKey,
+  maxRetries: env.maxRetries,
 });
 executor.start();
 
 const validator = new AccountValidator(
-  process.env.NEAR_RPC_URL!,
-  process.env.NEAR_CONTRACT_ID!,
+  env.nearRpcUrl,
+  env.nearContractId,
   {
     cacheTTL: 300000, // 5 minutes
     timeout: 10000, // 10 seconds
