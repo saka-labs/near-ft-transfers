@@ -332,7 +332,7 @@ describe("Executor - Recovery Mechanism", () => {
       amount: "500",
     });
 
-    const items = queue.pull(10);
+    const items = queue.peek(10);
 
     // Create the signed transaction directly
     const account = new Account(

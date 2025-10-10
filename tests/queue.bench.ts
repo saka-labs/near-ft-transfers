@@ -4,7 +4,7 @@ import type { TransferRequest } from "../src/types";
 
 // Configuration
 const PUSH_COUNT = Number(process.env.BENCH_PUSH_COUNT) || 10;
-const PULL_COUNT = Number(process.env.BENCH_PULL_COUNT) || 10;
+const PEEK_COUNT = Number(process.env.BENCH_PEEK_COUNT) || 10;
 
 const db = new Database(":memory:");
 const queue = new Queue(db);
@@ -20,13 +20,13 @@ for (let i = 0; i < PUSH_COUNT; i++) {
 }
 console.timeEnd(`Push ${PUSH_COUNT} items`);
 
-// Benchmark pull
-console.time(`Pull ${PULL_COUNT} items`);
-const pulled = queue.pull(PULL_COUNT);
-console.timeEnd(`Pull ${PULL_COUNT} items`);
+// Benchmark peek
+console.time(`Peek ${PEEK_COUNT} items`);
+const peeked = queue.peek(PEEK_COUNT);
+console.timeEnd(`Peek ${PEEK_COUNT} items`);
 
-console.info(`Pulled ${pulled.length} items`);
+console.info(`Peeked ${peeked.length} items`);
 
 // Verify data
-console.info("\nFirst item:", pulled[0]);
-console.info("Last item:", pulled[pulled.length - 1]);
+console.info("\nFirst item:", peeked[0]);
+console.info("Last item:", peeked[peeked.length - 1]);

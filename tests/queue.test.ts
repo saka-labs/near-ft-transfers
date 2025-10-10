@@ -22,7 +22,7 @@ describe("Queue", () => {
 
       queue.push(transfer);
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(1);
       expect(items[0]!.receiver_account_id).toBe("alice.testnet");
       expect(items[0]!.amount).toBe("1000000");
@@ -42,7 +42,7 @@ describe("Queue", () => {
       queue.push(transfer1);
       queue.push(transfer2);
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(1);
       expect(items[0]!.receiver_account_id).toBe("alice.testnet");
       expect(items[0]!.amount).toBe("3000000"); // 1000000 + 2000000
@@ -61,7 +61,7 @@ describe("Queue", () => {
       queue.push(transfer1);
       queue.push(transfer2);
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(2);
       expect(items[0]!.receiver_account_id).toBe("alice.testnet");
       expect(items[1]!.receiver_account_id).toBe("bob.testnet");
@@ -80,27 +80,27 @@ describe("Queue", () => {
       queue.push(transfer1);
       queue.push(transfer2);
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(1);
       expect(items[0]!.amount).toBe("3000000000000000000000000");
     });
   });
 
-  describe("pull", () => {
+  describe("peek", () => {
     test("should return empty array when queue is empty", () => {
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(0);
     });
 
-    test("should pull items with pending status (batch_id is null)", () => {
+    test("should peek items with pending status (batch_id is null)", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(1);
       expect(items[0]!.batch_id).toBeNull();
 
-      // Pull again - should get same items since they haven't been assigned to a batch yet
-      const items2 = queue.pull(10);
+      // Peek again - should get same items since they haven't been assigned to a batch yet
+      const items2 = queue.peek(10);
       expect(items2).toHaveLength(1);
     });
 
@@ -112,33 +112,33 @@ describe("Queue", () => {
         });
       }
 
-      const items = queue.pull(5);
+      const items = queue.peek(5);
       expect(items).toHaveLength(5);
     });
 
-    test("should pull items in FIFO order", () => {
+    test("should peek items in FIFO order", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
       queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items[0]!.receiver_account_id).toBe("alice.testnet");
       expect(items[1]!.receiver_account_id).toBe("bob.testnet");
       expect(items[2]!.receiver_account_id).toBe("charlie.testnet");
     });
 
-    test("should only pull pending items (batch_id is null)", () => {
+    test("should only peek pending items (batch_id is null)", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(2);
 
       // Assign to batch
       const batchId = queue.createSignedTransaction("hash1", new Uint8Array([1, 2, 3]), items.map(i => i.id));
 
-      // Pull again - should get nothing since items are assigned to batch
-      const items2 = queue.pull(10);
+      // Peek again - should get nothing since items are assigned to batch
+      const items2 = queue.peek(10);
       expect(items2).toHaveLength(0);
     });
   });
@@ -148,7 +148,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       const signedTx = new Uint8Array([1, 2, 3, 4, 5]);
       const batchId = queue.createSignedTransaction("txhash123", signedTx, items.map(i => i.id));
 
@@ -169,7 +169,7 @@ describe("Queue", () => {
 
     test("should mark batch as success and update tx_hash", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       const batchId = queue.createSignedTransaction("signedHash", new Uint8Array([1, 2, 3]), items.map(i => i.id));
 
       queue.markBatchSuccess(batchId, "actualTxHash");
@@ -184,7 +184,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       const batchId = queue.createSignedTransaction("hash", new Uint8Array([1, 2, 3]), items.map(i => i.id));
 
       queue.recoverFailedBatch(batchId, "Network error");
@@ -207,8 +207,8 @@ describe("Queue", () => {
       expect(updatedItem1!.error_message).toBe("Network error");
       expect(updatedItem2!.error_message).toBe("Network error");
 
-      // Items should be pullable again
-      const retriedItems = queue.pull(10);
+      // Items should be peekable again
+      const retriedItems = queue.peek(10);
       expect(retriedItems).toHaveLength(2);
     });
 
@@ -216,7 +216,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       const signedTx = new Uint8Array([1, 2, 3, 4, 5]);
       const batchId = queue.createSignedTransaction("txhash123", signedTx, items.map(i => i.id));
 
@@ -232,7 +232,7 @@ describe("Queue", () => {
   describe("recover", () => {
     test("should reset processing items back to pending", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       const batchId = queue.createSignedTransaction("hash", new Uint8Array([1, 2, 3]), items.map(i => i.id));
 
       queue.recover();
@@ -245,8 +245,8 @@ describe("Queue", () => {
       const updatedItem = queue.getById(items[0]!.id);
       expect(updatedItem!.batch_id).toBeNull();
 
-      // Items should be pullable again
-      const retriedItems = queue.pull(10);
+      // Items should be peekable again
+      const retriedItems = queue.peek(10);
       expect(retriedItems).toHaveLength(1);
     });
   });
@@ -254,7 +254,7 @@ describe("Queue", () => {
   describe("deduplication edge cases", () => {
     test("should create new entry when existing transfer has batch_id assigned", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(1);
+      const items = queue.peek(1);
       queue.createSignedTransaction("hash", new Uint8Array([1, 2, 3]), [items[0]!.id]);
 
       queue.push({ receiver_account_id: "alice.testnet", amount: "2000000" });
@@ -278,12 +278,12 @@ describe("Queue", () => {
 
       transfers.forEach((t) => queue.push(t));
 
-      const items = queue.pull(10);
+      const items = queue.peek(10);
       expect(items).toHaveLength(1);
       expect(items[0]!.amount).toBe("100000000"); // 1000000 * 100
     });
 
-    test("should handle pull operations atomically", () => {
+    test("should handle peek operations atomically", () => {
       for (let i = 0; i < 10; i++) {
         queue.push({
           receiver_account_id: `user${i}.testnet`,
@@ -291,16 +291,16 @@ describe("Queue", () => {
         });
       }
 
-      const batch1 = queue.pull(5);
-      const batch2 = queue.pull(5);
+      const batch1 = queue.peek(5);
+      const batch2 = queue.peek(5);
 
       expect(batch1).toHaveLength(5);
       expect(batch2).toHaveLength(5);
 
-      // No overlap since pull doesn't change status, but items are the same
+      // No overlap since peek doesn't change status, but items are the same
       const ids1 = batch1.map((i) => i.id);
       const ids2 = batch2.map((i) => i.id);
-      // All 10 items should be returned in both pulls
+      // All 10 items should be returned in both peeks
       expect(ids1).toEqual(ids2);
     });
   });
@@ -313,7 +313,7 @@ describe("Queue", () => {
       };
 
       queue.push(transfer);
-      const items = queue.pull(10);
+      const items = queue.peek(10);
 
       expect(items[0]!).toMatchObject({
         receiver_account_id: "alice.testnet",
@@ -335,11 +335,11 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
       // Create a processing batch
-      const items = queue.pull(1);
+      const items = queue.peek(1);
       queue.createSignedTransaction("hash1", new Uint8Array([1, 2, 3]), [items[0]!.id]);
 
       // Mark one as success
-      const successItems = queue.pull(1);
+      const successItems = queue.peek(1);
       const successBatchId = queue.createSignedTransaction("hash2", new Uint8Array([4, 5, 6]), [successItems[0]!.id]);
       queue.markBatchSuccess(successBatchId, "txhash");
 
@@ -359,7 +359,7 @@ describe("Queue", () => {
 
     test("should return true when there are processing items", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(1);
+      const items = queue.peek(1);
       queue.createSignedTransaction("hash", new Uint8Array([1, 2, 3]), [items[0]!.id]);
       expect(queue.hasPendingOrProcessing()).toBe(true);
     });
@@ -370,7 +370,7 @@ describe("Queue", () => {
 
     test("should return false when all items are successful", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(1);
+      const items = queue.peek(1);
       const batchId = queue.createSignedTransaction("hash", new Uint8Array([1, 2, 3]), [items[0]!.id]);
       queue.markBatchSuccess(batchId, "txhash");
       expect(queue.hasPendingOrProcessing()).toBe(false);
@@ -401,7 +401,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(2);
+      const items = queue.peek(2);
       queue.markItemStalled(items[0]!.id, "Test error");
 
       const stalledItems = queue.getAll({ is_stalled: true });
@@ -418,7 +418,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
       queue.push({ receiver_account_id: "alice.testnet", amount: "3000000" });
 
-      const items = queue.pull(3);
+      const items = queue.peek(3);
       queue.markItemStalled(items[0]!.id, "Test error");
 
       const filtered = queue.getAll({
@@ -452,7 +452,7 @@ describe("Queue", () => {
   describe("unstall operations", () => {
     test("should unstall a single item", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(1);
+      const items = queue.peek(1);
       queue.markItemStalled(items[0]!.id, "Test error");
 
       const success = queue.unstallItem(items[0]!.id);
@@ -470,7 +470,7 @@ describe("Queue", () => {
 
     test("should return false when unstalling non-stalled item", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
-      const items = queue.pull(1);
+      const items = queue.peek(1);
 
       const success = queue.unstallItem(items[0]!.id);
       expect(success).toBe(false);
@@ -481,7 +481,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
       queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
 
-      const items = queue.pull(3);
+      const items = queue.peek(3);
       queue.markItemStalled(items[0]!.id, "Error 1");
       queue.markItemStalled(items[1]!.id, "Error 2");
 
@@ -498,7 +498,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "alice.testnet", amount: "1000000" });
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
 
-      const items = queue.pull(2);
+      const items = queue.peek(2);
       queue.markItemStalled(items[0]!.id, "Error");
 
       // Try to unstall both, but only one is stalled
@@ -511,7 +511,7 @@ describe("Queue", () => {
       queue.push({ receiver_account_id: "bob.testnet", amount: "2000000" });
       queue.push({ receiver_account_id: "charlie.testnet", amount: "3000000" });
 
-      const items = queue.pull(3);
+      const items = queue.peek(3);
       queue.markItemStalled(items[0]!.id, "Error 1");
       queue.markItemStalled(items[1]!.id, "Error 2");
       queue.markItemStalled(items[2]!.id, "Error 3");

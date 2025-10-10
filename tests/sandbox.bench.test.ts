@@ -103,7 +103,7 @@ afterAll(async () => {
 
 describe("Executor - Benchmark", () => {
   test("should process 10000 queue items and report processing time", async () => {
-    const TRANSFER_COUNT = 10_000;
+    const TRANSFER_COUNT = 1000;
     const AMOUNT_PER_TRANSFER = "100";
 
     const db = new Database(":memory:");

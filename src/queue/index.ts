@@ -120,7 +120,7 @@ export class Queue extends EventEmitter {
     return id;
   }
 
-  pull(limit: number = 10): QueueItem[] {
+  peek(limit: number = 10): QueueItem[] {
     // Get pending items (batch_id is NULL means pending, exclude stalled items)
     const items = this.db
       .query(
@@ -129,7 +129,7 @@ export class Queue extends EventEmitter {
       .all(limit) as QueueItem[];
 
     if (items.length > 0) {
-      this.emit("pulled", items);
+      this.emit("peeked", items);
     }
     return items;
   }

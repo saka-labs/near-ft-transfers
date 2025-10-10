@@ -149,7 +149,7 @@ export class Executor extends EventEmitter {
     while (this.isRunning) {
       try {
         const startTime = Date.now();
-        const items = this.queue.pull(this.options.batchSize);
+        const items = this.queue.peek(this.options.batchSize);
         if (items.length >= this.options.minQueueToProcess!) {
           await this.processBatch(items);
         }
