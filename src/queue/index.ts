@@ -49,6 +49,8 @@ export class Queue extends EventEmitter {
     this.db.run(
       `CREATE INDEX IF NOT EXISTS idx_account_batch ON queue(receiver_account_id, batch_id)`,
     );
+    // Index for efficient lookup by is_stalled status
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_is_stalled ON queue(is_stalled)`);
 
     // Table for storing batch transactions
     this.db.run(`
@@ -236,7 +238,7 @@ export class Queue extends EventEmitter {
     return result.changes;
   }
 
-  recoverFailedBatch(batchId: number, errorMessage?: string) {
+  recoverFailedBatch(batchId: number, errorMessage?: string, maxRetries?: number) {
     const now = Date.now();
     const items = this.db
       .query("SELECT * FROM queue WHERE batch_id = ?")
@@ -258,6 +260,14 @@ export class Queue extends EventEmitter {
         "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, updated_at = ? WHERE batch_id = ?",
         [now, batchId],
       );
+
+      // If maxRetries is specified, mark items that exceed retry limit as stalled
+      if (maxRetries !== undefined) {
+        this.db.run(
+          "UPDATE queue SET is_stalled = 1 WHERE batch_id IS NULL AND retry_count > ?",
+          [maxRetries],
+        );
+      }
     });
 
     tx();

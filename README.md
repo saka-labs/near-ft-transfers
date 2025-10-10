@@ -109,6 +109,7 @@ On service restart:
 - **Individual item errors** (ActionError with index): Item is marked as `stalled` and removed from retry cycle
 - **Batch errors** (ActionError without index, InvalidTxError): All items returned to pending for retry with incremented `retry_count`
 - **Network errors**: Batch recovered and items retried
+- **Max retries exceeded**: After exceeding the configured maximum retry attempts (default: 5), items are automatically marked as `stalled` to prevent infinite retry loops
 
 ## Installation
 
@@ -125,6 +126,7 @@ NEAR_RPC_URL=https://rpc.testnet.near.org
 NEAR_ACCOUNT_ID=your-account.testnet
 NEAR_CONTRACT_ID=ft-contract.testnet
 NEAR_PRIVATE_KEY=ed25519:...
+MAX_RETRIES=5  # Maximum retry attempts before marking items as stalled (default: 5)
 ```
 
 ## Usage
@@ -364,8 +366,28 @@ new Executor(queue, {
   batchSize: 100,              // Max items per batch (1-100)
   interval: 500,               // Polling interval in ms
   minQueueToProcess: 1,        // Min items before processing
+  maxRetries: 5,               // Max retry attempts before stalling (default: 5)
 });
 ```
+
+### Retry and Stalling Behavior
+
+The system implements automatic retry logic with a configurable maximum:
+
+1. **Retry Counter**: Each time a batch fails, the `retry_count` is incremented for all items in that batch
+2. **Max Retries**: When `retry_count` exceeds `maxRetries` (default: 5), the item is automatically marked as `stalled`
+3. **Stalled Items**: Items marked as stalled are excluded from the queue and won't be retried automatically
+4. **Manual Recovery**: Stalled items can be manually unstalled via API endpoints:
+   - `PATCH /transfer/:id/unstall` - Unstall a single item
+   - `PATCH /transfers/unstall` - Unstall multiple items or all stalled items
+
+**Example Scenario:**
+- Item fails 6 times (retry_count = 6)
+- maxRetries is set to 5
+- Item is automatically marked as `is_stalled = 1`
+- Item no longer appears in `queue.peek()` results
+- Admin can review the error via `GET /transfers?is_stalled=true`
+- Admin can unstall via `PATCH /transfer/:id/unstall` after fixing the underlying issue
 
 ---
 

@@ -28,6 +28,7 @@ const executor = new Executor(queue, {
   accountId: process.env.NEAR_ACCOUNT_ID!,
   contractId: process.env.NEAR_CONTRACT_ID!,
   privateKey: process.env.NEAR_PRIVATE_KEY!,
+  maxRetries: process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES) : 5,
 });
 executor.start();
 

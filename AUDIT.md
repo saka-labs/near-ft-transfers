@@ -1,18 +1,25 @@
 # Repository Audit Report: near-ft-transfers
 
-**Audit Date:** 2025-10-05
+**Audit Date:** 2025-10-05 (Updated: 2025-10-10)
 **Auditor:** Claude Code
 **Repository:** NEAR Protocol FT Transfer Service with Queue-Based Execution
 
 ## Executive Summary
-This is a NEAR Protocol FT transfer service with a queue-based execution system. I've identified **12 critical bugs**, **8 performance issues**, **7 security concerns**, and **5 code quality/maintainability issues**.
+This is a NEAR Protocol FT transfer service with a queue-based execution system. After reviewing the latest codebase changes, several critical issues from the original audit have been **RESOLVED**. The current status shows **8 critical bugs**, **7 performance issues**, **7 security concerns**, and **4 code quality/maintainability issues** remaining.
+
+### ✅ Recently Resolved Issues (Since Original Audit):
+1. **Account Validation** - Added `AccountValidator` class with account existence and storage deposit checks
+2. **Storage Deposit Handling** - Automatic storage deposit detection and handling in batch processing
+3. **Queue.pull() renamed to Queue.peek()** - Better naming to reflect non-mutating behavior
+4. **Stalled Item Management APIs** - Added `/transfer/:id/unstall` and `/transfers/unstall` endpoints
+5. **Improved API Documentation** - Added OpenAPI schemas and Swagger UI
 
 ---
 
 ## 🔴 CRITICAL BUGS
 
 ### 1. **In-Memory Database in Production (CRITICAL)**
-**Location:** `src/index.ts:8`
+**Location:** `src/index.ts:23`
 ```typescript
 const db = new Database(":memory:");
 ```
@@ -29,7 +36,7 @@ const db = new Database(":memory:");
 ---
 
 ### 2. **Missing Environment Variable Validation**
-**Location:** `src/index.ts:12-15`
+**Location:** `src/index.ts:27-30`
 ```typescript
 const executor = new Executor(queue, {
   rpcUrl: process.env.NEAR_RPC_URL!,
@@ -54,60 +61,40 @@ for (const envVar of requiredEnvVars) {
 
 ---
 
-### 3. **Queue.pull() Returns Same Items on Multiple Calls**
-**Location:** `src/queue/index.ts:122-134`
+### 3. **Queue.peek() Returns Same Items on Multiple Calls (Race Condition)**
+**Location:** `src/queue/index.ts:123-134`
 
-**Issue:** The `pull()` method doesn't mark items as "being processed" - it only filters by `batch_id IS NULL`. This means:
-- Multiple concurrent pulls return the same items
+**Issue:** The `peek()` method (renamed from `pull()`) doesn't mark items as "being processed" - it only filters by `batch_id IS NULL`. This means:
+- Multiple concurrent peeks return the same items
 - No locking mechanism
 - Race conditions in concurrent environments
+- Same transfer could be processed multiple times if multiple executors call peek before creating signed transactions
 
-**Evidence:** Test at `tests/queue.test.ts:102-105` shows this behavior:
-```typescript
-// Pull again - should get same items since they haven't been assigned to a batch yet
-const items2 = queue.pull(10);
-expect(items2).toHaveLength(1);
-```
+**Impact:** Same transfer could be processed multiple times in concurrent environments.
 
-**Impact:** Same transfer could be processed multiple times if executor calls pull before creating the signed transaction.
-
-**Recommendation:** Consider implementing optimistic locking or marking items during pull.
+**Recommendation:** Implement optimistic or pessimistic locking mechanism. Consider renaming to `pull()` with atomic claim operation, or add a separate `claim()` method.
 
 ---
 
 ### 4. **Race Condition in Batch Processing**
-**Location:** `src/executor/index.ts:175-198`
+**Location:** `src/executor/index.ts:181-252`
 
-**Issue:** Between `pull()` and `createSignedTransaction()`, items remain in pending state and could be pulled again by another executor instance or loop iteration.
+**Issue:** Between `peek()` and `createSignedTransaction()`, items remain in pending state and could be peeked again by another executor instance or loop iteration.
 
 **Timeline:**
-1. Executor A pulls items (items still have `batch_id = NULL`)
-2. Executor B pulls same items (before A creates signed transaction)
+1. Executor A peeks items (items still have `batch_id = NULL`)
+2. Executor B peeks same items (before A creates signed transaction)
 3. Both create different signed transactions for same items
 4. Double-spending or inconsistent state
 
 **Impact:** Critical for horizontal scaling and high-frequency execution.
 
-**Recommendation:** Implement pessimistic locking or use SELECT FOR UPDATE pattern.
+**Recommendation:** Implement pessimistic locking or use SELECT FOR UPDATE pattern, or use a distributed lock service.
 
 ---
 
-### 5. **Stalled Items Not Included in Recovery**
-**Location:** `src/queue/index.ts:122-128` and `src/executor/index.ts:79-80`
-
-**Issue:** Stalled items (`is_stalled = 1`) are permanently excluded from processing, but there's no mechanism to:
-- Review stalled items
-- Manually retry them
-- Clear the stalled flag
-
-**Impact:** Items can get permanently stuck without manual database intervention.
-
-**Recommendation:** Add API endpoints to view, retry, or clear stalled items.
-
----
-
-### 6. **Incomplete Error Handling in Recovery**
-**Location:** `src/executor/index.ts:85-124`
+### 5. **Incomplete Error Handling in Recovery**
+**Location:** `src/executor/index.ts:85-130`
 
 **Issue:** `recoverProcessingTransactions()` re-broadcasts all pending signed transactions on startup, but:
 - No check if transaction was already successful on-chain
@@ -120,8 +107,8 @@ expect(items2).toHaveLength(1);
 
 ---
 
-### 7. **SQL Injection Risk in Dynamic Query Construction**
-**Location:** `src/queue/index.ts:156-159` and `src/queue/index.ts:239`
+### 6. **SQL Injection Risk in Dynamic Query Construction**
+**Location:** `src/queue/index.ts:156-159` and `src/queue/index.ts:219-224`
 ```typescript
 const placeholders = queueIds.map(() => "?").join(",");
 this.db.run(
@@ -137,27 +124,8 @@ this.db.run(
 
 ---
 
-### 8. **Missing Server Startup Code**
-**Location:** `src/index.ts` (end of file)
-
-**Issue:** The Hono app is created but never started with proper Bun server export or `app.listen()`. The API endpoints are defined but not accessible.
-
-**Impact:** The API endpoints are defined but not actually serving requests.
-
-**Recommendation:** Add proper Bun server export:
-```typescript
-const port = parseInt(process.env.PORT || "3000");
-console.info(`Server starting on port ${port}`);
-export default {
-  port,
-  fetch: app.fetch,
-};
-```
-
----
-
-### 9. **Transaction Status Type Safety Issue**
-**Location:** `src/types.ts:33-42`
+### 7. **Transaction Status Type Safety Issue**
+**Location:** `src/types.ts:38-47`
 ```typescript
 export type TransactionStatus = {
   SuccessValue?: string;
@@ -178,8 +146,8 @@ export type TransactionStatus = {
 
 ---
 
-### 10. **Unbounded Retry Loop**
-**Location:** `src/queue/index.ts:210-214` and `src/executor/index.ts:142-173`
+### 8. **Unbounded Retry Loop**
+**Location:** `src/queue/index.ts:257-260` and `src/executor/index.ts:255-291`
 
 **Issue:** Failed batches increment `retry_count` but there's no maximum retry limit. Items will retry forever.
 
@@ -189,43 +157,10 @@ export type TransactionStatus = {
 
 ---
 
-### 11. **Potential Logic Error in Batch Recovery**
-**Location:** `src/queue/index.ts:210-214`
-```typescript
-// Reset queue items to pending by clearing batch_id and incrementing retry_count
-this.db.run(
-  "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, updated_at = ? WHERE batch_id = ?",
-  [now, batchId],
-);
-```
-**Issue:** The WHERE clause uses `batch_id = ?` which should work, but the logic happens within a transaction that first deletes the batch, which might cause issues if batch_id foreign key constraints exist.
-
-**Impact:** Potential for retry logic not working correctly in edge cases.
-
-**Recommendation:** Verify transaction order and consider using a temporary variable.
-
----
-
-### 12. **Missing Transaction Atomicity in processBatch**
-**Location:** `src/executor/index.ts:175-246`
-
-**Issue:** The batch processing has multiple failure points between database updates and RPC calls without proper compensation:
-1. Creates signed transaction in DB
-2. Broadcasts to network (could fail)
-3. Updates DB based on result
-
-If step 2 fails with network error, the signed transaction remains in DB but was never broadcast.
-
-**Impact:** Orphaned signed transactions in processing state that may or may not have been broadcast.
-
-**Recommendation:** The recovery mechanism handles this, but add explicit timeout tracking.
-
----
-
 ## ⚠️ PERFORMANCE ISSUES
 
 ### 1. **No Connection Pooling**
-**Location:** `src/executor/index.ts:67-74`
+**Location:** `src/executor/index.ts:67`
 
 **Issue:** Each executor creates its own JSON-RPC provider without connection pooling or reuse.
 
@@ -236,7 +171,7 @@ If step 2 fails with network error, the signed transaction remains in DB but was
 ---
 
 ### 2. **Inefficient Polling Interval**
-**Location:** `src/executor/index.ts:142-173`
+**Location:** `src/executor/index.ts:148-178`
 
 **Issue:** Default 500ms polling interval continues even when queue is empty, wasting CPU cycles.
 
@@ -266,9 +201,9 @@ if (items.length === 0) {
 ---
 
 ### 4. **No Index on is_stalled Column**
-**Location:** `src/queue/index.ts:38-76`
+**Location:** `src/queue/index.ts:32-70`
 
-**Issue:** The pull query filters on `is_stalled = 0` but there's no index on this column:
+**Issue:** The peek query filters on `is_stalled = 0` but there's no index on this column:
 ```sql
 SELECT * FROM queue WHERE batch_id IS NULL AND is_stalled = 0
 ```
@@ -283,7 +218,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_items ON queue(batch_id, is_stalled) WHER
 ---
 
 ### 5. **EventEmitter Without Error Handling**
-**Location:** `src/queue/index.ts:25`, `src/executor/index.ts:34`
+**Location:** `src/queue/index.ts:18`, `src/executor/index.ts:34`
 
 **Issue:** EventEmitters can throw if listeners throw errors, but no error event handlers are configured.
 
@@ -309,24 +244,8 @@ this.on('error', (err) => {
 
 ---
 
-### 7. **No Database Vacuuming**
-**Location:** `src/queue/index.ts`
-
-**Issue:** SQLite database will grow over time due to deleted batch_transactions records, never reclaiming space.
-
-**Impact:** Increasing disk usage and degraded performance.
-
-**Recommendation:** Implement periodic maintenance:
-```typescript
-// Run weekly or after X deletions
-db.run('PRAGMA auto_vacuum = INCREMENTAL');
-db.run('PRAGMA incremental_vacuum');
-```
-
----
-
-### 8. **N+1 Query Pattern in Status Endpoint**
-**Location:** `src/index.ts:77-116`
+### 7. **N+1 Query Pattern in Status Endpoint**
+**Location:** `src/index.ts:289-312`
 ```typescript
 const item = queue.getById(id);
 // ...
@@ -354,7 +273,7 @@ getItemWithBatchInfo(id: number): ItemWithBatch | null {
 ## 🔒 SECURITY CONCERNS
 
 ### 1. **Private Key in Environment Variable**
-**Location:** `src/index.ts:15`
+**Location:** `src/index.ts:30`
 
 **Issue:** Storing private keys in environment variables is risky:
 - Visible in process listings (`ps aux`)
@@ -373,9 +292,9 @@ getItemWithBatchInfo(id: number): ItemWithBatch | null {
 ---
 
 ### 2. **No Rate Limiting on API Endpoints**
-**Location:** `src/index.ts:20-68`
+**Location:** `src/index.ts:46-431`
 
-**Issue:** No rate limiting on `/transfer` and `/transfers` endpoints.
+**Issue:** No rate limiting on `/transfer`, `/transfers`, and other endpoints.
 
 **Impact:**
 - DoS attack vector - flood queue with spam transfers
@@ -402,6 +321,7 @@ app.use('/transfer*', rateLimiter({
 **Issue:** API endpoints are completely open - anyone can:
 - Submit transfers
 - Check transfer status
+- Unstall transfers
 - Potentially drain funds
 
 **Impact:** Unauthorized usage, potential fund drainage, no audit trail.
@@ -419,13 +339,16 @@ app.use('/transfer*', async (c, next) => {
 
 ---
 
-### 4. **No Input Sanitization for Account IDs**
-**Location:** `src/types.ts:3-5`
+### 4. **Basic Input Validation for Account IDs**
+**Location:** `src/schemas.ts:4-13`
 ```typescript
-receiver_account_id: z.string().min(1),
+receiver_account_id: z.string().min(1).openapi({
+  example: "alice.testnet",
+  description: "NEAR account ID to receive the tokens"
+}),
 ```
 
-**Issue:** No validation that account ID follows NEAR naming rules:
+**Issue:** Minimal validation for account IDs. While account existence is now validated, the schema doesn't enforce NEAR naming rules:
 - Valid characters: lowercase a-z, 0-9, `-`, `_`, `.`
 - Length restrictions
 - Format validation
@@ -445,11 +368,11 @@ receiver_account_id: z.string()
 ---
 
 ### 5. **Exposed Transaction Information**
-**Location:** `src/index.ts:70-117`
+**Location:** `src/index.ts:256-327`
 
 **Issue:** Anyone can query any transfer by ID without authentication:
 ```typescript
-app.get("/transfer/:id", async (c) => {
+app.openapi(getTransferRoute, async (c) => {
   // No auth check
   const item = queue.getById(id);
   return c.json(item);
@@ -502,7 +425,7 @@ import { cors } from 'hono/cors';
 
 app.use('/*', cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
-  allowMethods: ['GET', 'POST'],
+  allowMethods: ['GET', 'POST', 'PATCH'],
   credentials: true,
 }));
 ```
@@ -521,8 +444,8 @@ app.use('/*', cors({
 - Correlation IDs
 
 **Example locations:**
-- `src/executor/index.ts:89, 100, 109, 169`
-- `src/index.ts` (no logging at all)
+- `src/executor/index.ts:89, 93, 99, 111, 118`
+- `src/index.ts` (no logging at all for API requests)
 
 **Impact:**
 - Difficult to debug in production
@@ -545,10 +468,10 @@ logger.info({ batchId, itemCount }, 'Processing batch');
 ---
 
 ### 2. **Magic Numbers**
-**Location:** `src/executor/index.ts:256-257`
+**Location:** `src/executor/index.ts:323-324, 338-339`
 ```typescript
 1000000000000n * 3n, // Gas: 3 TGas
-1n, // Attached deposit: 1 yoctoNEAR
+1250000000000000000000n, // 0.00125 NEAR (typical NEP-141 storage deposit)
 ```
 
 **Issue:** Hard-coded values without named constants.
@@ -561,6 +484,7 @@ logger.info({ batchId, itemCount }, 'Processing batch');
 **Recommendation:** Extract to named constants:
 ```typescript
 const GAS_PER_FT_TRANSFER = 3_000_000_000_000n; // 3 TGas
+const STORAGE_DEPOSIT_AMOUNT = 1_250_000_000_000_000_000_000n; // 0.00125 NEAR
 const YOCTO_NEAR_DEPOSIT = 1n; // 1 yoctoNEAR for ft_transfer
 
 // Usage:
@@ -576,9 +500,7 @@ actionCreators.functionCall(
 
 ### 3. **TODOs in Production Code**
 **Locations:**
-- `src/index.ts:7` - "TODO: This should not use memory in production"
-- `src/index.ts:22, 44` - "TODO: validate accountId should be a valid account and already deposited funds"
-- `src/executor/index.ts:254` - "TODO: handle memo"
+- `src/index.ts:22` - "TODO: This should not use memory in production"
 
 **Impact:**
 - Incomplete features
@@ -597,7 +519,7 @@ actionCreators.functionCall(
 
 **Issue:** No documentation for public API methods like:
 - `Queue.push()`
-- `Queue.pull()`
+- `Queue.peek()`
 - `Executor.start()`
 - `Executor.processBatch()`
 
@@ -623,66 +545,36 @@ push(transfer: TransferRequest): number {
 
 ---
 
-### 5. **Test Coverage Gaps**
-**Missing test coverage for:**
-- Stalled item recovery and retry mechanism
-- Max retry limit behavior (doesn't exist yet)
-- Concurrent executor instances running simultaneously
-- API endpoint error cases (400, 404, 500)
-- Database transaction rollback scenarios
-- Network failure recovery
-- Invalid transaction signatures
-
-**Recommendation:** Add integration tests for:
-```typescript
-describe("Error Handling", () => {
-  test("should handle database connection failures");
-  test("should handle RPC timeout errors");
-  test("should handle invalid signatures");
-});
-
-describe("Concurrent Operations", () => {
-  test("should handle multiple executors safely");
-  test("should prevent double-processing of items");
-});
-```
-
----
-
 ## 📝 RECOMMENDATIONS SUMMARY
 
 ### 🔴 Immediate (Critical) - Fix Before Production:
 1. **Fix in-memory database** - Use persistent storage (file-based SQLite or PostgreSQL)
 2. **Add environment variable validation** - Fail fast on startup if config missing
-3. **Implement proper locking** in `queue.pull()` to prevent race conditions
-4. **Add server startup code** - Export Bun server properly to serve HTTP
-5. **Add max retry limit** - Prevent infinite retry loops
-6. **Add authentication** - Protect API endpoints from unauthorized access
+3. **Implement proper locking** in `queue.peek()` to prevent race conditions
+4. **Add max retry limit** - Prevent infinite retry loops
+5. **Add authentication** - Protect API endpoints from unauthorized access
+6. **Query transaction status before re-broadcasting** in recovery
 
 ### 🟡 High Priority - Fix Within 1-2 Weeks:
 7. **Implement rate limiting** - Prevent DoS attacks
-8. **Add stalled item management** - API to view/retry/clear stalled items
-9. **Fix race conditions** in batch processing for horizontal scaling
-10. **Validate NEAR account IDs** - Prevent invalid input
-11. **Add HTTPS enforcement** - Secure communication in production
-12. **Query transaction status** before re-broadcasting in recovery
+8. **Fix race conditions** in batch processing for horizontal scaling
+9. **Add NEAR account ID format validation** - Prevent invalid input
+10. **Add HTTPS enforcement** - Secure communication in production
 
 ### 🟢 Medium Priority - Fix Within 1 Month:
-13. **Add database indices** - Improve query performance
-14. **Implement exponential backoff** - Reduce polling overhead
-15. **Add structured logging** - Better observability and debugging
-16. **Improve error type safety** - Remove `any` types
-17. **Optimize N+1 queries** - Use JOINs for better performance
-18. **Add CORS configuration** - Proper cross-origin security
+11. **Add database indices** - Improve query performance (`is_stalled` column)
+12. **Implement exponential backoff** - Reduce polling overhead
+13. **Add structured logging** - Better observability and debugging
+14. **Improve error type safety** - Remove `any` types
+15. **Optimize N+1 queries** - Use JOINs for better performance
+16. **Add CORS configuration** - Proper cross-origin security
 
 ### 🔵 Nice to Have - Future Improvements:
-19. **Add comprehensive JSDoc** - Improve developer experience
-20. **Extract magic numbers** to named constants
-21. **Add more comprehensive tests** - Edge cases and error scenarios
-22. **Implement connection pooling** - Better resource utilization
-23. **Secure key management** - Move from env vars to KMS
-24. **Database vacuuming** - Scheduled maintenance tasks
-25. **Resolve all TODOs** - Complete incomplete features
+17. **Add comprehensive JSDoc** - Improve developer experience
+18. **Extract magic numbers** to named constants
+19. **Implement connection pooling** - Better resource utilization
+20. **Secure key management** - Move from env vars to KMS
+21. **Resolve all TODOs** - Complete incomplete features
 
 ---
 
@@ -698,27 +590,26 @@ To make this production-ready, address these in order:
 2. **Security Basics** (2-3 days)
    - Add API authentication (API keys)
    - Implement rate limiting
-   - Add input validation for account IDs
+   - Add NEAR account ID format validation
 
 3. **Concurrency Fixes** (3-5 days)
-   - Fix race conditions in queue.pull()
+   - Fix race conditions in queue.peek()
    - Add proper locking mechanism
    - Test with multiple executor instances
 
-4. **Server Configuration** (1 day)
-   - Add proper Bun server export
-   - Configure HTTPS
-   - Set up CORS
-
-5. **Error Handling** (2-3 days)
+4. **Error Handling** (2-3 days)
    - Add max retry limits
-   - Implement stalled item management
+   - Check transaction status before re-broadcasting in recovery
    - Add proper transaction status checking
 
-6. **Observability** (2-3 days)
+5. **Observability** (2-3 days)
    - Add structured logging
    - Set up monitoring/alerting
    - Add health check endpoint
+
+6. **Server Configuration** (1 day)
+   - Configure HTTPS enforcement
+   - Set up CORS properly
 
 **Total estimated time:** 2-3 weeks of focused development
 
@@ -726,20 +617,36 @@ To make this production-ready, address these in order:
 
 ## 📋 CONCLUSION
 
-This codebase demonstrates **good architectural patterns**:
+This codebase demonstrates **good architectural patterns** and **recent improvements**:
 - ✅ Queue-based processing for reliability
 - ✅ Recovery mechanisms for failure handling
 - ✅ Event system for observability
 - ✅ Batch processing for efficiency
+- ✅ **Account validation with storage deposit checks** (NEW)
+- ✅ **Stalled item management APIs** (NEW)
+- ✅ **Automatic storage deposit handling** (NEW)
+- ✅ **OpenAPI documentation with Swagger UI** (NEW)
 
-However, it has **critical production-readiness issues**:
+However, it still has **critical production-readiness issues**:
 - ❌ **Data persistence** - Complete data loss on restart
-- ❌ **Concurrency bugs** - Cannot scale horizontally
+- ❌ **Concurrency bugs** - Cannot scale horizontally safely
 - ❌ **Security** - No authentication or authorization
-- ❌ **Server startup** - API not actually accessible
+- ❌ **Race conditions** - peek() doesn't claim items atomically
 
-**Overall Assessment:** This is a **prototype/MVP** that needs significant hardening before production use. The core logic is sound, but infrastructure concerns (persistence, security, scalability) are not addressed.
+**Overall Assessment:** This is an **improved MVP** that needs additional hardening before production use. The core logic is sound and recent additions show good progress, but infrastructure concerns (persistence, security, scalability) still need to be addressed.
 
 **Risk Level:** 🔴 **HIGH** - Do not deploy to production without addressing critical issues.
 
 **Recommended Action:** Dedicate 2-3 weeks to address critical and high-priority items before any production deployment.
+
+---
+
+## ✅ RESOLVED ISSUES (Since Original Audit)
+
+The following issues from the original audit have been **successfully resolved**:
+
+1. ✅ **Account Validation Added** - `AccountValidator` class now validates account existence before queueing transfers
+2. ✅ **Storage Deposit Detection** - Automatic detection and handling of storage deposits in batch processing
+3. ✅ **Queue Method Naming** - `pull()` renamed to `peek()` to better reflect non-mutating behavior
+4. ✅ **Stalled Item Management** - Added unstall endpoints: `PATCH /transfer/:id/unstall` and `PATCH /transfers/unstall`
+5. ✅ **API Documentation** - OpenAPI schemas and Swagger UI at `/ui` endpoint

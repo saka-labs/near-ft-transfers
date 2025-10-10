@@ -17,6 +17,7 @@ export type ExecutorOptions = {
   batchSize?: number;
   interval?: number;
   minQueueToProcess?: number;
+  maxRetries?: number;
 };
 
 export type ExecutorEvents = {
@@ -47,6 +48,7 @@ export class Executor extends EventEmitter {
       batchSize = 100,
       interval = 500,
       minQueueToProcess = 1,
+      maxRetries = 5,
       ...options
     }: ExecutorOptions,
   ) {
@@ -62,6 +64,7 @@ export class Executor extends EventEmitter {
       batchSize,
       interval,
       minQueueToProcess,
+      maxRetries,
     };
 
     this.jsonRpcProvider = new JsonRpcProvider({ url: this.options.rpcUrl });
@@ -273,9 +276,9 @@ export class Executor extends EventEmitter {
         const item = items[actionIndex]!;
         // Mark the specific item as stalled
         this.queue.markItemStalled(item.id, errorMessage);
-        this.queue.recoverFailedBatch(batchId);
+        this.queue.recoverFailedBatch(batchId, undefined, this.options.maxRetries);
       } else {
-        this.queue.recoverFailedBatch(batchId, errorMessage);
+        this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
       }
 
       return { isValid: false, errorMessage };
@@ -283,7 +286,7 @@ export class Executor extends EventEmitter {
 
     if (status.Failure.InvalidTxError) {
       const errorMessage = JSON.stringify(status.Failure.InvalidTxError);
-      this.queue.recoverFailedBatch(batchId, errorMessage);
+      this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
       return { isValid: false, errorMessage };
     }
 
@@ -299,7 +302,7 @@ export class Executor extends EventEmitter {
     console.error(`${context}:`, error);
 
     if (batchId) {
-      this.queue.recoverFailedBatch(batchId, errorMessage);
+      this.queue.recoverFailedBatch(batchId, errorMessage, this.options.maxRetries);
     }
 
     return errorMessage;
