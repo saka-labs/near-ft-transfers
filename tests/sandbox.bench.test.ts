@@ -8,13 +8,7 @@ import { readFile } from "fs/promises";
 import { Database } from "bun:sqlite";
 import { Queue } from "../src/queue";
 import { Executor } from "../src/executor";
-import {
-  describe,
-  test,
-  expect,
-  beforeAll,
-  afterAll,
-} from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 
 let sandbox: Awaited<ReturnType<typeof Sandbox.start>>;
 let accountA: Account;
@@ -102,7 +96,7 @@ afterAll(async () => {
 });
 
 describe("Executor - Benchmark", () => {
-  test("should process 10000 queue items and report processing time", async () => {
+  test("should process queue items and report processing time", async () => {
     const TRANSFER_COUNT = 1000;
     const AMOUNT_PER_TRANSFER = "100";
 
@@ -133,6 +127,7 @@ describe("Executor - Benchmark", () => {
       queue.push({
         receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
         amount: AMOUNT_PER_TRANSFER,
+        has_storage_deposit: true,
       });
     }
     const pushEndTime = Date.now();
@@ -164,8 +159,12 @@ describe("Executor - Benchmark", () => {
     console.info(`Total time: ${pushTime + processingTime}ms`);
     console.info(`Items processed: ${stats.success}`);
     console.info(`Items failed: ${stats.failed}`);
-    console.info(`Average time per item: ${(processingTime / stats.success).toFixed(2)}ms`);
-    console.info(`Throughput: ${(stats.success / (processingTime / 1000)).toFixed(2)} items/sec`);
+    console.info(
+      `Average time per item: ${(processingTime / stats.success).toFixed(2)}ms`,
+    );
+    console.info(
+      `Throughput: ${(stats.success / (processingTime / 1000)).toFixed(2)} items/sec`,
+    );
     console.info(`Initial balance: ${initialBalance}`);
     console.info(`Final balance: ${finalBalance}`);
     console.info("=============================\n");
@@ -176,7 +175,8 @@ describe("Executor - Benchmark", () => {
     expect(stats.pending).toBe(0);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + BigInt(TRANSFER_COUNT) * BigInt(AMOUNT_PER_TRANSFER)
+      BigInt(initialBalance.toString()) +
+      BigInt(TRANSFER_COUNT) * BigInt(AMOUNT_PER_TRANSFER)
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 

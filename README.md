@@ -370,6 +370,57 @@ new Executor(queue, {
 });
 ```
 
+The queue can be configured with:
+
+```typescript
+new Queue(db, {
+  mergeExistingAccounts: true,        // Merge amounts for same account in pending state (default: true)
+  defaultHasStorageDeposit: false,    // Default value for has_storage_deposit when not specified (default: false)
+});
+```
+
+### Queue Configuration Options
+
+#### `defaultHasStorageDeposit`
+
+This option sets the default value for `has_storage_deposit` when pushing items to the queue without explicitly specifying it:
+
+- **Default**: `false` (assumes accounts need storage deposit)
+- **When to set `true`**: If your FT contract doesn't require storage deposits, or if you're confident all receiver accounts already have storage deposits registered
+- **Override per-item**: Individual transfers can override this default by specifying `has_storage_deposit` explicitly
+
+**Example usage:**
+
+```typescript
+// Queue with default: assumes storage deposits are needed
+const queue1 = new Queue(db, {
+  defaultHasStorageDeposit: false,  // default
+});
+
+queue1.push({
+  receiver_account_id: "alice.near",
+  amount: "1000",
+  // has_storage_deposit will be false (uses queue default)
+});
+
+// Queue with custom default: assumes storage deposits exist
+const queue2 = new Queue(db, {
+  defaultHasStorageDeposit: true,
+});
+
+queue2.push({
+  receiver_account_id: "bob.near",
+  amount: "2000",
+  // has_storage_deposit will be true (uses queue default)
+});
+
+queue2.push({
+  receiver_account_id: "carol.near",
+  amount: "3000",
+  has_storage_deposit: false,  // Explicitly override the default
+});
+```
+
 ### Retry and Stalling Behavior
 
 The system implements automatic retry logic with a configurable maximum:

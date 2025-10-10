@@ -95,4 +95,48 @@ describe("Queue - Max Retry Logic", () => {
 
     expect(indexes.length).toBe(1);
   });
+
+  test("should use defaultHasStorageDeposit from queue options when not specified", () => {
+    // Create a new queue with defaultHasStorageDeposit = true
+    const dbWithDefault = new Database(":memory:");
+    const queueWithDefault = new Queue(dbWithDefault, {
+      mergeExistingAccounts: false,
+      defaultHasStorageDeposit: true,
+    });
+
+    // Push without specifying has_storage_deposit
+    const id1 = queueWithDefault.push({
+      receiver_account_id: "test1.near",
+      amount: "100",
+    });
+
+    // Push with explicit has_storage_deposit = false
+    const id2 = queueWithDefault.push({
+      receiver_account_id: "test2.near",
+      amount: "200",
+      has_storage_deposit: false,
+    });
+
+    const item1 = queueWithDefault.getById(id1);
+    const item2 = queueWithDefault.getById(id2);
+
+    // Item 1 should use the default (true)
+    expect(item1?.has_storage_deposit).toBe(1);
+
+    // Item 2 should use the explicit value (false)
+    expect(item2?.has_storage_deposit).toBe(0);
+  });
+
+  test("should default to false when defaultHasStorageDeposit is not specified", () => {
+    // Queue created without defaultHasStorageDeposit option
+    const id = queue.push({
+      receiver_account_id: "test.near",
+      amount: "100",
+    });
+
+    const item = queue.getById(id);
+
+    // Should default to false (0)
+    expect(item?.has_storage_deposit).toBe(0);
+  });
 });

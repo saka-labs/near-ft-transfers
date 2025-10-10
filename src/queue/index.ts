@@ -5,6 +5,7 @@ import { EventEmitter } from "events";
 
 export type QueueOptions = {
   mergeExistingAccounts?: boolean;
+  defaultHasStorageDeposit?: boolean;
 };
 
 export type QueueStats = {
@@ -24,6 +25,7 @@ export class Queue extends EventEmitter {
     this.db = db;
     this.options = {
       mergeExistingAccounts: options.mergeExistingAccounts ?? true,
+      defaultHasStorageDeposit: options.defaultHasStorageDeposit ?? false,
     };
     this.initSchema();
   }
@@ -73,7 +75,7 @@ export class Queue extends EventEmitter {
 
   push(transfer: TransferRequest & { has_storage_deposit?: boolean }): number {
     const now = Date.now();
-    const hasStorageDeposit = transfer.has_storage_deposit ?? false;
+    const hasStorageDeposit = transfer.has_storage_deposit ?? this.options.defaultHasStorageDeposit ?? false;
 
     const tx = this.db.transaction(() => {
       if (this.options.mergeExistingAccounts) {
