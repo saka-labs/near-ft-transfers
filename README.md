@@ -16,6 +16,70 @@ This service provides a REST API for queuing and executing NEAR FT transfers. It
 - **Individual Error Handling**: Isolates and stalls problematic transfers without affecting others in the batch
 - **Transaction Tracking**: Provides real-time status updates and transaction hashes for all transfers
 - **Event System**: Emits events for monitoring and observability
+- **OpenAPI Documentation**: Built-in Swagger UI for API exploration and testing
+
+## Quick Start
+
+### Prerequisites
+
+- **Bun** runtime (v1.2.18 or later) - [Install Bun](https://bun.sh)
+- A NEAR Protocol account with private key
+- Access to a NEAR RPC endpoint (testnet or mainnet)
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd near-ft-transfers
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   bun install
+   ```
+
+3. **Configure environment variables**:
+
+   Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` with your configuration:
+   ```bash
+   # Required Configuration
+   NEAR_RPC_URL=https://rpc.testnet.near.org
+   NEAR_ACCOUNT_ID=your-account.testnet
+   NEAR_CONTRACT_ID=ft-contract.testnet
+   NEAR_PRIVATE_KEY=ed25519:your_private_key_here
+
+   # Optional Configuration
+   MAX_RETRIES=5
+   DATABASE_PATH=:memory:
+   NODE_ENV=development
+   ```
+
+   **Important**:
+   - `DATABASE_PATH=:memory:` means data is stored in memory only (lost on restart)
+   - For production, use a file path like `./data/transfers.db` for persistent storage
+   - The private key format must be: `ed25519:base58_encoded_key`
+
+4. **Start the service**:
+   ```bash
+   # Production mode
+   bun start
+
+   # Development mode with auto-reload
+   bun run dev
+   ```
+
+5. **Access the API**:
+   - **API Base URL**: `http://localhost:3000`
+   - **Swagger UI**: `http://localhost:3000/ui`
+   - **OpenAPI JSON**: `http://localhost:3000/doc`
+
+The service will start on port 3000 by default and begin processing queued transfers automatically.
 
 ## Architecture
 
@@ -52,187 +116,376 @@ This service provides a REST API for queuing and executing NEAR FT transfers. It
 - Supports batch validation for efficient multi-account checks
 - Provides detailed error messages for debugging
 
-### How It Works
+## Service Flow: From Queue to Execution
 
-#### 1. **Submitting Transfers**
+### Complete Transfer Lifecycle
 
-```
-POST /transfer or POST /transfers
-  ↓
-Validates request format (Zod schema)
-  ↓
-Validates account existence & storage deposit
-  ↓
-Returns 400 error if validation fails
-  ↓
-Adds to queue (merges if duplicate receiver_account_id exists in pending)
-  ↓
-Returns transfer_id(s)
-```
+This section explains the entire flow of a transfer from the moment it's submitted to the API until it's executed on the NEAR blockchain.
 
-#### 2. **Processing Flow**
+### Phase 1: Transfer Submission & Validation
 
 ```
-Executor pulls pending items from queue
+Client submits transfer via API
   ↓
-For each item, determines required actions:
-  - If has_storage_deposit=false: storage_deposit + ft_transfer (2 actions)
-  - If has_storage_deposit=true: ft_transfer only (1 action)
+1. Request Validation (Zod Schema)
+   - Validates JSON format
+   - Ensures receiver_account_id is a valid string
+   - Ensures amount is a valid string number
   ↓
-Limits batch to fit within 100 action maximum
-  (Defers excess items to next batch)
+2. Account Validation (NEAR RPC)
+   - Checks if account exists on NEAR (via view_account)
+   - Checks storage deposit status (via storage_balance_of)
+   - Results cached for 5 minutes
   ↓
-Creates NEAR FT transfer actions
+3. Validation Results:
+   ├─ Account doesn't exist
+   │  └─ ❌ Return 400 error, DO NOT queue
+   │
+   └─ Account exists
+      ├─ Has storage deposit (has_storage_deposit=true)
+      │  └─ ✅ Queue transfer, return transfer_id
+      │
+      └─ No storage deposit (has_storage_deposit=false)
+         └─ ⚠️ Queue transfer (flagged), return transfer_id
+            (Executor will handle storage deposit automatically)
   ↓
-Signs batch transaction and stores signed blob in DB
+4. Queue Storage (SQLite)
+   - If duplicate receiver_account_id in pending state:
+     └─ Merge amounts: new_amount = existing_amount + new_amount
+   - Otherwise create new queue entry
+   - Queue item status: PENDING (batch_id = NULL)
   ↓
-Broadcasts to NEAR network
-  ↓
-Handles result:
-  - Success: Marks batch as success, updates tx_hash, sets has_storage_deposit=true
-  - ActionError with index: Stalls specific item, retries rest
-  - ActionError without index: Retries entire batch
-  - InvalidTxError: Retries entire batch
+5. Response to Client
+   - Success: { transfer_id, success: true, message: "..." }
+   - Error: { error: "Account does not exist" }
 ```
 
-#### 3. **Recovery Mechanism**
+### Phase 2: Batch Processing (Executor Loop)
 
-On service restart:
+The executor runs continuously in the background (default: every 500ms):
 
-1. Re-broadcasts any pending signed transactions from the database
-2. Resets items from failed batches back to pending
-3. Deletes failed batch transaction records
-4. Items are automatically retried in new batches
-
-#### 4. **Error Handling Strategy**
-
-- **Individual item errors** (ActionError with index): Item is marked as `stalled` and removed from retry cycle
-- **Batch errors** (ActionError without index, InvalidTxError): All items returned to pending for retry with incremented `retry_count`
-- **Network errors**: Batch recovered and items retried
-- **Max retries exceeded**: After exceeding the configured maximum retry attempts (default: 5), items are automatically marked as `stalled` to prevent infinite retry loops
-
-## Installation
-
-```bash
-bun install
+```
+Executor Poll Cycle (every 500ms)
+  ↓
+1. Check Queue
+   - Peek at pending items (WHERE batch_id IS NULL AND is_stalled = 0)
+   - Pull up to 100 items (configurable batch size)
+  ↓
+2. Calculate Action Limit
+   - NEAR allows max 100 actions per transaction
+   - For each item:
+     * has_storage_deposit=false → 2 actions (storage_deposit + ft_transfer)
+     * has_storage_deposit=true → 1 action (ft_transfer only)
+   - Dynamically calculate how many items fit in batch
+   - Defer remaining items to next batch
+  ↓
+3. Create Transaction
+   - Build action list for each item:
+     * If no storage deposit: storage_deposit(0.00125 NEAR, 3 TGas)
+     * Always: ft_transfer(amount, 1 yoctoNEAR, 3 TGas)
+   - Sign transaction with sender's private key
+   - Calculate signed transaction hash (sha256)
+  ↓
+4. Store Transaction (Database Transaction)
+   - Create batch_transactions record:
+     * tx_hash: signed transaction hash
+     * signed_tx: encoded transaction blob
+     * status: PROCESSING
+   - Update queue items:
+     * Set batch_id to batch transaction ID
+     * Items now in PROCESSING state
+  ↓
+5. Broadcast to NEAR
+   - Send signed transaction via RPC
+   - Wait for transaction result
+  ↓
+6. Handle Result → Go to Phase 3
 ```
 
-## Configuration
+### Phase 3: Transaction Result Handling
 
-Set the following environment variables:
+```
+Transaction Result Received
+  ↓
+┌─────────────────────────────────────────────┐
+│ CASE 1: Success ✅                          │
+├─────────────────────────────────────────────┤
+│ - Update batch_transactions:                │
+│   * status = SUCCESS                        │
+│   * tx_hash = actual transaction hash       │
+│   * signed_tx = NULL (cleanup)              │
+│ - Update all queue items in batch:          │
+│   * has_storage_deposit = true              │
+│ - Items now permanently in SUCCESS state    │
+│ - Transaction hash available via API        │
+└─────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────┐
+│ CASE 2: ActionError with Index 🔴          │
+├─────────────────────────────────────────────┤
+│ Specific action failed (e.g., action #5)    │
+│ - Mark specific item as STALLED:           │
+│   * is_stalled = 1                          │
+│   * error_message = action error details    │
+│ - Recover remaining items in batch:         │
+│   * batch_id = NULL (back to pending)       │
+│   * retry_count += 1                        │
+│ - Delete batch_transactions record          │
+│ - Stalled item excluded from future batches │
+│ - Other items retried in next batch         │
+└─────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────┐
+│ CASE 3: ActionError without Index 🟡       │
+├─────────────────────────────────────────────┤
+│ General action failure (index unknown)      │
+│ - Recover ALL items in batch:              │
+│   * batch_id = NULL (back to pending)       │
+│   * retry_count += 1                        │
+│   * error_message = error details           │
+│ - Delete batch_transactions record          │
+│ - Check retry limit:                        │
+│   * If retry_count > MAX_RETRIES (default 5)│
+│     └─ Mark as STALLED                      │
+│ - Non-stalled items retried in next batch   │
+└─────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────┐
+│ CASE 4: InvalidTxError 🟡                  │
+├─────────────────────────────────────────────┤
+│ Transaction structure/signature invalid     │
+│ - Recover ALL items in batch:              │
+│   * batch_id = NULL (back to pending)       │
+│   * retry_count += 1                        │
+│   * error_message = error details           │
+│ - Delete batch_transactions record          │
+│ - Check retry limit (same as CASE 3)        │
+└─────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────┐
+│ CASE 5: Network Error / RPC Timeout 🔵     │
+├─────────────────────────────────────────────┤
+│ Failed to broadcast or get result           │
+│ - Recover ALL items in batch:              │
+│   * batch_id = NULL (back to pending)       │
+│   * retry_count += 1                        │
+│   * error_message = network error           │
+│ - Keep signed_tx in batch_transactions      │
+│ - Items retried in next batch               │
+└─────────────────────────────────────────────┘
+```
 
+### Phase 4: Service Restart Recovery
+
+When the service restarts (crash, deployment, etc.):
+
+```
+Service Starts
+  ↓
+1. Recovery Phase
+   - Query batch_transactions WHERE status = PROCESSING AND signed_tx IS NOT NULL
+  ↓
+2. Re-broadcast Pending Transactions
+   - For each pending batch:
+     * Decode signed transaction blob
+     * Re-send to NEAR RPC
+     * Handle result (same as Phase 3)
+  ↓
+3. Reset Failed Batches
+   - Delete batch_transactions WHERE status != SUCCESS
+   - Reset associated queue items:
+     * batch_id = NULL (back to pending)
+  ↓
+4. Start Executor Loop
+   - Begin normal processing (Phase 2)
+```
+
+### Phase 5: Manual Recovery (Stalled Items)
+
+Stalled items require manual intervention:
+
+```
+Admin Reviews Stalled Items
+  ↓
+1. Query Stalled Items
+   GET /transfers?is_stalled=true
+  ↓
+2. Investigate Error
+   - Check error_message field
+   - Determine root cause
+   - Fix underlying issue (e.g., insufficient balance, contract issue)
+  ↓
+3. Unstall Items
+   - Single item: PATCH /transfer/{id}/unstall
+   - Multiple items: PATCH /transfers/unstall {"ids": [1, 2, 3]}
+   - All stalled: PATCH /transfers/unstall {"all": true}
+  ↓
+4. Items Reset to Pending
+   - is_stalled = 0
+   - batch_id = NULL
+   - Automatically picked up by executor in next cycle
+```
+
+### State Diagram
+
+```
+                          ┌─────────────┐
+                          │   PENDING   │ ← Initial state after queueing
+                          │ (batch_id=  │
+                          │    NULL)    │
+                          └──────┬──────┘
+                                 │
+                    Executor picks up item
+                                 │
+                                 ▼
+                          ┌─────────────┐
+                          │ PROCESSING  │ ← Transaction created & broadcast
+                          │(batch_id=ID)│
+                          └──────┬──────┘
+                                 │
+                    Transaction result received
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           │                     │                     │
+           ▼                     ▼                     ▼
+    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+    │   SUCCESS   │      │   STALLED   │      │   PENDING   │
+    │(batch_id=ID)│      │(is_stalled= │      │ (batch_id=  │
+    │             │      │     1)      │      │   NULL)     │
+    └─────────────┘      └──────┬──────┘      └──────┬──────┘
+         Final                   │                    │
+         state                   │                    │
+                          Manual unstall        Retry in next
+                                 │              batch (if retry
+                                 │              count < max)
+                                 ▼                    │
+                          ┌─────────────┐            │
+                          │   PENDING   │◄───────────┘
+                          │ (batch_id=  │
+                          │    NULL)    │
+                          └─────────────┘
+```
+
+### Key Points
+
+1. **Atomic Operations**: All database operations use transactions to ensure consistency
+2. **Automatic Retry**: Failed items automatically retry up to MAX_RETRIES times
+3. **Graceful Degradation**: Individual failures don't block other transfers
+4. **Recovery Resilience**: Service can restart mid-process without losing transactions
+5. **Storage Deposit**: Automatically handled during execution, transparent to clients
+
+## API Documentation
+
+The service provides comprehensive API documentation via OpenAPI/Swagger:
+
+### Accessing Documentation
+
+- **Swagger UI**: `http://localhost:3000/ui` - Interactive API documentation with request/response examples
+- **OpenAPI JSON**: `http://localhost:3000/doc` - OpenAPI 3.0 specification in JSON format
+
+The Swagger UI allows you to:
+- Explore all available endpoints
+- View request/response schemas
+- Test API calls directly from the browser
+- See example payloads for each endpoint
+
+### Available Endpoints
+
+All endpoints are documented in detail in the Swagger UI. Here's a quick overview:
+
+#### Transfer Management
+- `POST /transfer` - Queue a single transfer
+- `POST /transfers` - Queue multiple transfers in batch
+- `GET /transfer/{id}` - Get status of a specific transfer
+- `GET /transfers` - List all transfers (with optional filters)
+
+#### Recovery Operations
+- `PATCH /transfer/{id}/unstall` - Unstall a single transfer
+- `PATCH /transfers/unstall` - Unstall multiple or all stalled transfers
+
+## Environment Configuration
+
+The service requires specific environment variables to be configured. All configuration is validated on startup using Zod schemas.
+
+### Required Variables
+
+| Variable | Description | Example | Validation |
+|----------|-------------|---------|------------|
+| `NEAR_RPC_URL` | NEAR RPC endpoint URL | `https://rpc.testnet.near.org` | Must be a valid URL |
+| `NEAR_ACCOUNT_ID` | Sender account ID (your account that sends tokens) | `your-account.testnet` | Must be non-empty string |
+| `NEAR_CONTRACT_ID` | Fungible token contract ID | `ft-contract.testnet` | Must be non-empty string |
+| `NEAR_PRIVATE_KEY` | Private key for sender account | `ed25519:5JueXZh...` | Must be in `ed25519:base58` format |
+
+### Optional Variables
+
+| Variable | Default | Description | Validation |
+|----------|---------|-------------|------------|
+| `MAX_RETRIES` | `5` | Maximum retry attempts before marking items as stalled | Integer between 0-100 |
+| `DATABASE_PATH` | `:memory:` | Database file path (`:memory:` for in-memory, or file path for persistence) | Any valid string |
+| `NODE_ENV` | `development` | Node environment | Must be: `development`, `production`, or `test` |
+
+### Configuration Examples
+
+**Development (In-Memory Database)**:
 ```bash
 NEAR_RPC_URL=https://rpc.testnet.near.org
-NEAR_ACCOUNT_ID=your-account.testnet
-NEAR_CONTRACT_ID=ft-contract.testnet
-NEAR_PRIVATE_KEY=ed25519:...
-MAX_RETRIES=5  # Maximum retry attempts before marking items as stalled (default: 5)
+NEAR_ACCOUNT_ID=dev-account.testnet
+NEAR_CONTRACT_ID=dev-ft.testnet
+NEAR_PRIVATE_KEY=ed25519:3D4YudUahN1nawWogh8pAKrqXG8BQn6KhGvXkY4VgPCaF
+MAX_RETRIES=5
+DATABASE_PATH=:memory:
+NODE_ENV=development
 ```
 
-## Usage
-
-### Starting the Service
-
+**Production (Persistent Database)**:
 ```bash
-bun run src/index.ts
-
-# Or with auto-reload
-bun run dev
+NEAR_RPC_URL=https://rpc.mainnet.near.org
+NEAR_ACCOUNT_ID=production-account.near
+NEAR_CONTRACT_ID=token.near
+NEAR_PRIVATE_KEY=ed25519:YOUR_PRODUCTION_KEY_HERE
+MAX_RETRIES=3
+DATABASE_PATH=./data/transfers.db
+NODE_ENV=production
 ```
 
-### API Endpoints
+### Configuration Validation
 
-#### Submit Single Transfer
+The service validates all environment variables on startup:
+- Invalid or missing required variables will cause the service to fail with detailed error messages
+- Type validation ensures integers are valid numbers
+- URL validation ensures RPC endpoints are properly formatted
+- Enum validation for NODE_ENV restricts to allowed values
 
-```bash
-POST /transfer
-{
-  "receiver_account_id": "alice.testnet",
-  "amount": "1000000000000000000"  # String number in smallest units
-}
+**Example validation error**:
+```
+Environment validation failed:
+  - NEAR_RPC_URL: NEAR_RPC_URL must be a valid URL
+  - MAX_RETRIES: MAX_RETRIES must be a valid integer
 
-Response (Success):
-{
-  "success": true,
-  "transfer_id": 123,
-  "message": "Transfer queued successfully..."
-}
-
-Response (Account Does Not Exist):
-{
-  "error": "Account 'alice.testnet' does not exist on NEAR"
-}
-
-Response (Account Exists but No Storage Deposit):
-{
-  "success": true,
-  "transfer_id": 123,
-  "has_storage_deposit": false,
-  "message": "Transfer queued but receiver account needs storage deposit registration. This will be handled by the executor."
-}
+Please check your .env file and ensure all required variables are set correctly.
 ```
 
-#### Submit Multiple Transfers
+### Important Notes
 
-```bash
-POST /transfers
-[
-  {
-    "receiver_account_id": "alice.testnet",
-    "amount": "1000000000000000000"
-  },
-  {
-    "receiver_account_id": "bob.testnet",
-    "amount": "2000000000000000000"
-  }
-]
+1. **Private Key Security**:
+   - Never commit `.env` files to version control
+   - Use `.env.example` as a template
+   - In production, use secrets management (e.g., AWS Secrets Manager, HashiCorp Vault)
 
-Response (Success):
-{
-  "success": true,
-  "transfer_ids": [123, 124],
-  "message": "Transfers queued successfully..."
-}
+2. **Database Persistence**:
+   - `:memory:` means data is lost on restart (good for development/testing)
+   - File path means persistent storage (required for production)
+   - Create directory structure before starting: `mkdir -p ./data`
 
-Response (Accounts Do Not Exist):
-{
-  "error": "One or more accounts do not exist on NEAR",
-  "invalid_accounts": [
-    {
-      "accountId": "invalid.testnet",
-      "error": "Account 'invalid.testnet' does not exist on NEAR"
-    }
-  ]
-}
+3. **MAX_RETRIES**:
+   - Lower values (3-5) prevent wasting gas on persistently failing transfers
+   - Higher values increase resilience to temporary network issues
+   - Items exceeding retry limit are marked as `stalled` and require manual intervention
 
-Response (Some Accounts Without Storage Deposit):
-{
-  "success": true,
-  "transfer_ids": [123, 124],
-  "message": "Transfers queued successfully. 1 transfer(s) need storage deposit registration which will be handled by the executor."
-}
-```
-
-#### Check Transfer Status
-
-```bash
-GET /transfer/:id
-
-Response:
-{
-  "id": 123,
-  "receiver_account_id": "alice.testnet",
-  "amount": "1000000000000000000",
-  "status": "success",  # pending | processing | success | failed | stalled
-  "tx_hash": "ABC123...",
-  "error_message": null,
-  "retry_count": 0,
-  "is_stalled": false,
-  "has_storage_deposit": true,
-  "created_at": 1696500000000,
-  "updated_at": 1696500001000
-}
-```
+4. **RPC Endpoints**:
+   - Testnet: `https://rpc.testnet.near.org`
+   - Mainnet: `https://rpc.mainnet.near.org`
+   - Custom RPC: Use your own or third-party RPC for better performance
 
 ## Account Validation
 
