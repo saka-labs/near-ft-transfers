@@ -1,19 +1,22 @@
-import { Account } from "@near-js/accounts";
 import type { Queue } from "../queue";
 import type { QueueItem, TransactionStatus } from "../types";
-import { JsonRpcProvider } from "@near-js/providers";
-import { KeyPairSigner } from "@near-js/signers";
-import { KeyPair, type KeyPairString } from "@near-js/crypto";
-import { actionCreators, SignedTransaction } from "@near-js/transactions";
 import { sleep } from "bun";
-import { sha256Bs58 } from "../utils";
 import { EventEmitter } from "events";
+import {
+  createClient,
+  createMemoryKeyService,
+  testnet,
+  mainnet,
+  createMemorySigner,
+  functionCall,
+} from '@eclipseeer/near-api-ts';
 
 export type ExecutorOptions = {
   rpcUrl: string;
   accountId: string;
   contractId: string;
-  privateKey: string;
+
+  privateKeys: string[];
   batchSize?: number;
   interval?: number;
   minQueueToProcess?: number;
@@ -48,8 +51,10 @@ export class Executor extends EventEmitter {
 
   private options: ExecutorOptions;
 
-  private account: Account;
-  private jsonRpcProvider: JsonRpcProvider;
+  private signer?: Awaited<ReturnType<typeof createMemorySigner>>;
+  private client: Awaited<ReturnType<typeof createClient>>;
+
+  private maxConcurrency: number;
 
   constructor(
     queue: Queue,
@@ -67,6 +72,10 @@ export class Executor extends EventEmitter {
       throw new Error("batchSize must be between 1 and 100");
     }
 
+    if (!options.privateKeys || options.privateKeys.length === 0) {
+      throw new Error("At least one private key is required");
+    }
+
     this.queue = queue;
     this.options = {
       ...options,
@@ -76,18 +85,51 @@ export class Executor extends EventEmitter {
       maxRetries,
     };
 
-    this.jsonRpcProvider = new JsonRpcProvider({ url: this.options.rpcUrl });
-    this.account = new Account(
-      this.options.accountId,
-      this.jsonRpcProvider,
-      new KeyPairSigner(
-        KeyPair.fromString(this.options.privateKey as KeyPairString),
-      ),
-    );
+    this.maxConcurrency = this.options.privateKeys.length;
+
+    console.info(`Executor initialized with ${this.options.privateKeys.length} signing key(s) (concurrency: ${this.maxConcurrency})`);
+
+    const network = this.getNetworkConfig();
+    this.client = createClient({ network });
+  }
+
+  private getNetworkConfig() {
+    if (this.options.rpcUrl.includes('testnet') || this.options.rpcUrl.includes('test')) {
+      return testnet;
+    } else if (this.options.rpcUrl.includes('localhost') || this.options.rpcUrl.includes('127.0.0.1')) {
+      return {
+        rpcs: {
+          regular: [{ url: this.options.rpcUrl }],
+          archival: [{ url: this.options.rpcUrl }],
+        },
+      };
+    } else {
+      return mainnet;
+    }
+  }
+
+  private async initializeSigner() {
+    const privateKeys = this.options.privateKeys;
+
+    console.info(`Initializing signer with ${privateKeys.length} key(s)...`);
+
+    const keyService = await createMemoryKeyService({
+      keySources: privateKeys.map(key => ({ privateKey: key as any })),
+    });
+
+    this.signer = await createMemorySigner({
+      signerAccountId: this.options.accountId,
+      client: this.client,
+      keyService,
+    });
+
+    console.info(`Signer initialized successfully with ${privateKeys.length} key(s) in pool`);
   }
 
   async start() {
     if (this.isRunning) return;
+
+    await this.initializeSigner();
     await this.recoverProcessingTransactions();
     this.queue.recover();
     this.isRunning = true;
@@ -110,23 +152,13 @@ export class Executor extends EventEmitter {
           `Re-broadcasting transaction ${batch.tx_hash} for queue items [${batch.queue_ids.join(", ")}]`,
         );
 
-        // Decode the signed transaction and re-broadcast it
-        const result = await this.jsonRpcProvider.sendTransaction(
-          SignedTransaction.decode(batch.signed_tx),
+        // TODO: Implement recovery logic near-api-ts
+        // Mark the batch as failed so items can be retried
+        this.queue.recoverFailedBatch(
+          batch.id,
+          "Recovery not supported with near-api-ts yet - marking for retry",
+          this.options.maxRetries,
         );
-
-        // Validate transaction result
-        const validation = this.validateTransactionResult(result, batch.id);
-        if (!validation.isValid) {
-          console.error(
-            `Re-broadcast transaction ${batch.tx_hash} failed validation: ${validation.errorMessage}`,
-          );
-          continue;
-        }
-
-        const txHash = result.transaction.hash;
-        console.info(`Successfully re-broadcast transaction: ${txHash}`);
-        this.queue.markBatchSuccess(batch.id, txHash);
       } catch (error) {
         await this.handleBroadcastError(
           error,
@@ -159,9 +191,30 @@ export class Executor extends EventEmitter {
     while (this.isRunning) {
       try {
         const startTime = Date.now();
-        const items = this.queue.peek(this.options.batchSize);
-        if (items.length >= this.options.minQueueToProcess!) {
-          await this.processBatch(items);
+        const totalItemsNeeded = this.maxConcurrency * this.options.batchSize!;
+        const allItems = this.queue.peek(totalItemsNeeded);
+
+        if (allItems.length >= this.options.minQueueToProcess!) {
+          const batchPromises: Promise<void>[] = [];
+
+          for (let i = 0; i < this.maxConcurrency; i++) {
+            const startIdx = i * this.options.batchSize!;
+            const endIdx = startIdx + this.options.batchSize!;
+            const batchItems = allItems.slice(startIdx, endIdx);
+
+            if (batchItems.length < this.options.minQueueToProcess!) {
+              break; // Not enough items for this batch
+            }
+
+            // Process batch in parallel
+            const batchPromise = this.processBatch(batchItems);
+            batchPromises.push(batchPromise);
+          }
+
+          // Wait for all batches to complete
+          if (batchPromises.length > 0) {
+            await Promise.allSettled(batchPromises);
+          }
         }
         const processTime = Date.now() - startTime;
 
@@ -217,7 +270,11 @@ export class Executor extends EventEmitter {
     let batchId;
 
     try {
-      console.info(`Processing batch of ${items.length} items...`);
+      console.info(`Processing batch of ${itemsToProcess.length} items...`);
+
+      if (!this.signer) {
+        throw new Error("Signer not initialized");
+      }
 
       // Create actions for each item, including storage deposit if needed
       const actions = itemsToProcess.flatMap((item) =>
@@ -229,20 +286,23 @@ export class Executor extends EventEmitter {
         ),
       );
 
-      const signed = await this.account.createSignedTransaction(
-        this.options.contractId,
+      // Create a placeholder batch record (we don't have the tx hash yet)
+      const signedTx = await this.signer.signTransaction({
         actions,
-      );
-      const signedHash = await sha256Bs58(signed.transaction.encode());
+        receiverAccountId: this.options.contractId,
+      });
 
-      // Create signed transaction record and associate with queue items in a transaction
       batchId = this.queue.createSignedTransaction(
-        signedHash,
-        signed.encode(),
+        signedTx.transactionHash,
+        signedTx.signature as any,
         itemIds,
       );
 
-      const result = await this.jsonRpcProvider.sendTransaction(signed);
+      // Execute transaction using near-api-ts
+      const result = await this.client.sendSignedTransaction({
+        signedTransaction: signedTx
+      })
+
       // Validate transaction result
       const validation = this.validateTransactionResult(result, batchId, items);
       if (!validation.isValid) {
@@ -250,7 +310,6 @@ export class Executor extends EventEmitter {
         return;
       }
 
-      // signedHash and txHash should be exactly the same, just to be sure
       const txHash = result.transaction.hash;
       console.info("Transaction hash:", txHash);
 
@@ -346,30 +405,30 @@ export class Executor extends EventEmitter {
 
     if (!hasStorageDeposit) {
       actions.push(
-        actionCreators.functionCall(
-          "storage_deposit",
-          {
+        functionCall({
+          functionName: "storage_deposit",
+          fnArgsJson: {
             account_id: receiverId,
             registration_only: true,
           },
-          1000000000000n * 3n, // Gas:  3 TGas
-          1250000000000000000000n, // 0.00125 NEAR (typical NEP-141 storage deposit)
-        ),
+          attachedDeposit: { yoctoNear: 1250000000000000000000n }, // 0.00125 NEAR
+          gasLimit: { teraGas: '3' }, // 3 TGas
+        }),
       );
     }
 
     // Add ft_transfer action
     actions.push(
-      actionCreators.functionCall(
-        "ft_transfer",
-        {
+      functionCall({
+        functionName: "ft_transfer",
+        fnArgsJson: {
           receiver_id: receiverId,
           amount: amount,
           memo,
         },
-        1000000000000n * 3n, // Gas:  3 TGas
-        1n, // 1 yoctoNEAR
-      ),
+        attachedDeposit: { yoctoNear: 1n }, // 1 yoctoNEAR
+        gasLimit: { teraGas: '3' }, // 3 TGas
+      }),
     );
 
     return actions;
