@@ -10,6 +10,10 @@ export const TransferRequestSchema = z.object({
     example: "1000000",
     description: "Amount in smallest token unit (e.g., yoctoNEAR)"
   }),
+  memo: z.string().optional().openapi({
+    example: "Payment for services",
+    description: "Optional memo for the transfer"
+  }),
 });
 
 export const TransfersRequestSchema = z.array(TransferRequestSchema).openapi({
@@ -37,6 +41,7 @@ export const TransferItemSchema = z.object({
   id: z.number().openapi({ example: 1 }),
   receiver_account_id: z.string().openapi({ example: "alice.testnet" }),
   amount: z.string().openapi({ example: "1000000" }),
+  memo: z.string().nullable().openapi({ example: "Payment for services" }),
   status: z.string().openapi({ example: "pending", description: "Status: pending, processing, success, stalled, failed, unknown" }),
   tx_hash: z.string().nullable().openapi({ example: "8fG2h3J4k5L6m7N8p9Q0r1S2t3U4v5W6x7Y8z9A0b1C" }),
   error_message: z.string().nullable().openapi({ example: null }),

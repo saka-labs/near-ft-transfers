@@ -36,6 +36,7 @@ export class Queue extends EventEmitter {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         receiver_account_id TEXT NOT NULL,
         amount TEXT NOT NULL,
+        memo TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         retry_count INTEGER DEFAULT 0,
@@ -73,7 +74,7 @@ export class Queue extends EventEmitter {
     );
   }
 
-  push(transfer: TransferRequest & { has_storage_deposit?: boolean }): number {
+  push(transfer: TransferRequest & { has_storage_deposit?: boolean; memo?: string }): number {
     const now = Date.now();
     const hasStorageDeposit = transfer.has_storage_deposit ?? this.options.defaultHasStorageDeposit ?? false;
 
@@ -95,8 +96,8 @@ export class Queue extends EventEmitter {
             BigInt(existing.amount) + BigInt(transfer.amount)
           ).toString();
           this.db.run(
-            "UPDATE queue SET amount = ?, has_storage_deposit = ?, updated_at = ? WHERE id = ?",
-            [newAmount, hasStorageDeposit ? 1 : 0, now, existing.id],
+            "UPDATE queue SET amount = ?, memo = ?, has_storage_deposit = ?, updated_at = ? WHERE id = ?",
+            [newAmount, transfer.memo || null, hasStorageDeposit ? 1 : 0, now, existing.id],
           );
           return existing.id;
         }
@@ -104,10 +105,11 @@ export class Queue extends EventEmitter {
 
       // Create new entry (either merging is disabled or no existing entry found)
       this.db.run(
-        "INSERT INTO queue (receiver_account_id, amount, has_storage_deposit, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO queue (receiver_account_id, amount, memo, has_storage_deposit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
         [
           transfer.receiver_account_id,
           transfer.amount,
+          transfer.memo || null,
           hasStorageDeposit ? 1 : 0,
           now,
           now,

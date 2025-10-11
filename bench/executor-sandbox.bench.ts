@@ -65,7 +65,9 @@ async function runBenchmark() {
 
     // Deploy FT contract
     console.info("Deploying FT contract...");
-    const ftContract = await readFile(`${import.meta.dir}/../tests/fungible_token.wasm`);
+    const ftContract = await readFile(
+      `${import.meta.dir}/../tests/fungible_token.wasm`,
+    );
     await accountA.deployContract(ftContract);
     await accountA.callFunction({
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
@@ -118,6 +120,7 @@ async function runBenchmark() {
         receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
         amount: AMOUNT_PER_TRANSFER.toString(),
         has_storage_deposit: true,
+        memo: "Test transfer",
       });
     }
     const pushEndTime = Date.now();
@@ -167,7 +170,9 @@ async function runBenchmark() {
     ).toString();
 
     if (stats.success !== TRANSFER_COUNT) {
-      console.error(`❌ Expected ${TRANSFER_COUNT} successful transfers, got ${stats.success}`);
+      console.error(
+        `❌ Expected ${TRANSFER_COUNT} successful transfers, got ${stats.success}`,
+      );
       process.exit(1);
     }
 
@@ -177,7 +182,9 @@ async function runBenchmark() {
     }
 
     if (finalBalance !== expectedBalance) {
-      console.error(`❌ Balance mismatch: expected ${expectedBalance}, got ${finalBalance}`);
+      console.error(
+        `❌ Balance mismatch: expected ${expectedBalance}, got ${finalBalance}`,
+      );
       process.exit(1);
     }
 

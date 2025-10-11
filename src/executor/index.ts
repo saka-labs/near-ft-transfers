@@ -225,6 +225,7 @@ export class Executor extends EventEmitter {
           item.receiver_account_id,
           item.amount,
           Boolean(item.has_storage_deposit),
+          item.memo,
         ),
       );
 
@@ -339,6 +340,7 @@ export class Executor extends EventEmitter {
     receiverId: string,
     amount: string,
     hasStorageDeposit: boolean,
+    memo: string | null,
   ) {
     const actions = [];
 
@@ -363,7 +365,7 @@ export class Executor extends EventEmitter {
         {
           receiver_id: receiverId,
           amount: amount,
-          memo: null,
+          memo,
         },
         1000000000000n * 3n, // Gas:  3 TGas
         1n, // 1 yoctoNEAR

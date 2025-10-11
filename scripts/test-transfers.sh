@@ -15,7 +15,12 @@ for i in $(seq 1 $ITERATIONS); do
   if [ $i -gt 1 ]; then
     json+=","
   fi
-  json+="{\"receiver_account_id\":\"user$i.testnet\",\"amount\":\"${i}000000000000000000000000\"}"
+  # Include memo for odd-numbered requests to demonstrate memo functionality
+  if [ $((i % 2)) -eq 1 ]; then
+    json+="{\"receiver_account_id\":\"user$i.testnet\",\"amount\":\"${i}000000000000000000000000\",\"memo\":\"Batch transfer $i\"}"
+  else
+    json+="{\"receiver_account_id\":\"user$i.testnet\",\"amount\":\"${i}000000000000000000000000\"}"
+  fi
 done
 json+="]"
 

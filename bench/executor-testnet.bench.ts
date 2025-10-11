@@ -63,6 +63,7 @@ async function runBenchmark() {
       receiver_account_id: NEAR_RECEIVER_ACCOUNT_ID,
       amount: AMOUNT_PER_TRANSFER.toString(),
       has_storage_deposit: true,
+      memo: "Test transfer",
     });
   }
   const pushEndTime = Date.now();

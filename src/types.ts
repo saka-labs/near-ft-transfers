@@ -3,6 +3,7 @@ import { z } from "zod";
 export const TransferRequestSchema = z.object({
   receiver_account_id: z.string().min(1),
   amount: z.string().regex(/^\d+$/, "amount must be a valid numeric string"),
+  memo: z.string().optional(),
 });
 export type TransferRequest = z.infer<typeof TransferRequestSchema>;
 
@@ -26,6 +27,7 @@ export type QueueItem = {
   id: number;
   receiver_account_id: string;
   amount: string;
+  memo: string | null;
   created_at: number;
   updated_at: number;
   retry_count: number;
