@@ -10,10 +10,10 @@ import { Queue } from "../src/queue";
 import { Executor } from "../src/executor";
 
 async function runBenchmark() {
-  const TRANSFER_COUNT = parseInt(process.env.TRANSFER_COUNT || "1000");
-  const AMOUNT_PER_TRANSFER = "100";
-  const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "100");
-  const RPC_PORT = parseInt(process.env.RPC_PORT || "45555");
+  const TRANSFER_COUNT = 1000;
+  const AMOUNT_PER_TRANSFER = 100;
+  const BATCH_SIZE = 100;
+  const RPC_PORT = 45555;
 
   console.info("===== NEAR FT Transfer Benchmark =====");
   console.info(`Transfer count: ${TRANSFER_COUNT}`);
@@ -116,7 +116,7 @@ async function runBenchmark() {
     for (let i = 0; i < TRANSFER_COUNT; i++) {
       queue.push({
         receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
-        amount: AMOUNT_PER_TRANSFER,
+        amount: AMOUNT_PER_TRANSFER.toString(),
         has_storage_deposit: true,
       });
     }
