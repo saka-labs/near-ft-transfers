@@ -15,17 +15,26 @@ async function runBenchmark() {
   const RPC_URL = "https://test.rpc.fastnear.com";
   const NEAR_ACCOUNT_ID = "jinakmerpati.testnet";
   const NEAR_CONTRACT_ID = "jinakmerpati.testnet";
-  const NEAR_PRIVATE_KEY =
-    "ed25519:5uGZbkwRcgjp6w93koFMDcgnx5t5XA8FwsFGsEtig5sZbgXccgMLe21KzxMEzxeZ5LAsSHECoCuB6LBXrpSWz83C";
+
+  // Multiple private keys for parallel processing
+  // Add more keys to increase concurrency
+  const NEAR_PRIVATE_KEYS = [
+    "ed25519:5uGZbkwRcgjp6w93koFMDcgnx5t5XA8FwsFGsEtig5sZbgXccgMLe21KzxMEzxeZ5LAsSHECoCuB6LBXrpSWz83C",
+    // Add more private keys here for parallel processing:
+    // "ed25519:YourSecondKey...",
+    // "ed25519:YourThirdKey...",
+  ];
+
   // This should be already has a storage deposit
   const NEAR_RECEIVER_ACCOUNT_ID = "jinakayam.testnet";
 
-  const keyPair = KeyPair.fromString(NEAR_PRIVATE_KEY);
+  const keyPair = KeyPair.fromString(NEAR_PRIVATE_KEYS[0]! as any);
 
   console.info("===== NEAR FT Transfer Benchmark =====");
   console.info(`Transfer count: ${TRANSFER_COUNT}`);
   console.info(`Batch size: ${BATCH_SIZE}`);
   console.info(`Amount per transfer: ${AMOUNT_PER_TRANSFER}`);
+  console.info(`Private keys (concurrency): ${NEAR_PRIVATE_KEYS.length}`);
   console.info("=====================================\n");
 
   const accountA = new Account(
@@ -42,7 +51,7 @@ async function runBenchmark() {
     rpcUrl: RPC_URL,
     accountId: NEAR_ACCOUNT_ID,
     contractId: NEAR_CONTRACT_ID,
-    privateKey: NEAR_PRIVATE_KEY,
+    privateKeys: NEAR_PRIVATE_KEYS, // Multiple keys for parallel processing
     batchSize: BATCH_SIZE,
     interval: 100,
   });

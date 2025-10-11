@@ -8,17 +8,20 @@ import { readFile } from "fs/promises";
 import { Database } from "bun:sqlite";
 import { Queue } from "../src/queue";
 import { Executor } from "../src/executor";
+import { sleep } from "bun";
 
 async function runBenchmark() {
   const TRANSFER_COUNT = 1000;
   const AMOUNT_PER_TRANSFER = 100;
   const BATCH_SIZE = 100;
   const RPC_PORT = 45555;
+  const NUM_KEYS = 3; // Number of keys for parallel processing
 
   console.info("===== NEAR FT Transfer Benchmark =====");
   console.info(`Transfer count: ${TRANSFER_COUNT}`);
   console.info(`Batch size: ${BATCH_SIZE}`);
   console.info(`Amount per transfer: ${AMOUNT_PER_TRANSFER}`);
+  console.info(`Parallel keys (concurrency): ${NUM_KEYS}`);
   console.info("=====================================\n");
 
   // Start sandbox
@@ -54,6 +57,25 @@ async function runBenchmark() {
       new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider,
       new KeyPairSigner(accountAKeyPair),
     );
+
+    // Create additional keys for parallel processing
+    console.info(`Creating ${NUM_KEYS - 1} additional access keys for parallel processing...`);
+    const additionalKeyPairs: KeyPair[] = [];
+    for (let i = 0; i < NUM_KEYS - 1; i++) {
+      const newKeyPair = KeyPair.fromRandom("ED25519");
+      additionalKeyPairs.push(newKeyPair);
+
+      // Add full access key to account A
+      await accountA.addFullAccessKey(newKeyPair.getPublicKey());
+      console.info(`  Added key ${i + 1}/${NUM_KEYS - 1}`);
+    }
+
+    // Collect all private keys (original + additional)
+    const allPrivateKeys = [
+      accountAKeyPair.toString(),
+      ...additionalKeyPairs.map(kp => kp.toString()),
+    ];
+    console.info(`Total keys available: ${allPrivateKeys.length}`);
 
     // Create account B (receiver)
     const accountBKeyPair = KeyPair.fromRandom("ED25519");
@@ -92,6 +114,8 @@ async function runBenchmark() {
     console.info("Setup completed\n");
 
     // Initialize queue and executor
+    // Wait for 5 seconds to avoid invalid nonce error
+    sleep(5000);
     const db = new Database(":memory:");
     const queue = new Queue(db, { mergeExistingAccounts: false });
 
@@ -99,7 +123,7 @@ async function runBenchmark() {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: allPrivateKeys,
       batchSize: BATCH_SIZE,
       interval: 100,
     });
