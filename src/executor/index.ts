@@ -128,7 +128,7 @@ export class Executor extends EventEmitter {
         console.info(`Successfully re-broadcast transaction: ${txHash}`);
         this.queue.markBatchSuccess(batch.id, txHash);
       } catch (error) {
-        this.handleBroadcastError(
+        await this.handleBroadcastError(
           error,
           batch.id,
           `Failed to re-broadcast transaction ${batch.tx_hash}`,
@@ -256,7 +256,7 @@ export class Executor extends EventEmitter {
       this.queue.markBatchSuccess(batchId, txHash);
       this.emit("batchProcessed", items.length, true);
     } catch (error) {
-      const errorMessage = this.handleBroadcastError(
+      const errorMessage = await this.handleBroadcastError(
         error,
         batchId,
         "Failed to process batch",
@@ -315,11 +315,11 @@ export class Executor extends EventEmitter {
     return { isValid: true };
   }
 
-  private handleBroadcastError(
+  private async handleBroadcastError(
     error: unknown,
     batchId: number | undefined,
     context: string,
-  ): string {
+  ): Promise<string> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`${context}:`, error);
 
@@ -331,6 +331,7 @@ export class Executor extends EventEmitter {
       );
     }
 
+    await sleep(5000);
     return errorMessage;
   }
 

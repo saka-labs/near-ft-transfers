@@ -12,7 +12,7 @@ async function runBenchmark() {
   const BATCH_SIZE = 100;
 
   // Provide your own NEAR account details here
-  const RPC_URL = "https://rpc.testnet.near.org";
+  const RPC_URL = "https://test.rpc.fastnear.com";
   const NEAR_ACCOUNT_ID = "jinakmerpati.testnet";
   const NEAR_CONTRACT_ID = "jinakmerpati.testnet";
   const NEAR_PRIVATE_KEY =
