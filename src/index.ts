@@ -27,7 +27,7 @@ const executor = new Executor(queue, {
   rpcUrl: env.nearRpcUrl,
   accountId: env.nearAccountId,
   contractId: env.nearContractId,
-  privateKey: env.nearPrivateKey,
+  privateKeys: env.nearPrivateKeys,
   maxRetries: env.maxRetries,
 });
 executor.start();

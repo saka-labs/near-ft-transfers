@@ -23,7 +23,7 @@ This service provides a REST API for queuing and executing NEAR FT transfers. It
 ### Prerequisites
 
 - **Bun** runtime (v1.2.18 or later) - [Install Bun](https://bun.sh)
-- A NEAR Protocol account with private key
+- A NEAR Protocol account with one or more private keys
 - Access to a NEAR RPC endpoint (testnet or mainnet)
 
 ### Installation
@@ -52,7 +52,7 @@ This service provides a REST API for queuing and executing NEAR FT transfers. It
    NEAR_RPC_URL=https://rpc.testnet.near.org
    NEAR_ACCOUNT_ID=your-account.testnet
    NEAR_CONTRACT_ID=ft-contract.testnet
-   NEAR_PRIVATE_KEY=ed25519:your_private_key_here
+   NEAR_PRIVATE_KEYS=ed25519:your_private_key_here
 
    # Optional Configuration
    MAX_RETRIES=5
@@ -63,7 +63,7 @@ This service provides a REST API for queuing and executing NEAR FT transfers. It
    **Important**:
    - `DATABASE_PATH=:memory:` means data is stored in memory only (lost on restart)
    - For production, use a file path like `./data/transfers.db` for persistent storage
-   - The private key format must be: `ed25519:base58_encoded_key`
+   - The private keys format must be: `ed25519:base58_encoded_key` (comma-separated for multiple keys)
 
 4. **Start the service**:
    ```bash
@@ -414,7 +414,7 @@ The service requires specific environment variables to be configured. All config
 | `NEAR_RPC_URL` | NEAR RPC endpoint URL | `https://rpc.testnet.near.org` | Must be a valid URL |
 | `NEAR_ACCOUNT_ID` | Sender account ID (your account that sends tokens) | `your-account.testnet` | Must be non-empty string |
 | `NEAR_CONTRACT_ID` | Fungible token contract ID | `ft-contract.testnet` | Must be non-empty string |
-| `NEAR_PRIVATE_KEY` | Private key for sender account | `ed25519:5JueXZh...` | Must be in `ed25519:base58` format |
+| `NEAR_PRIVATE_KEYS` | Comma-separated private keys for sender account (determines concurrency) | `ed25519:5JueXZh...` | Must be in `ed25519:base58` format, comma-separated for multiple |
 
 ### Optional Variables
 
@@ -431,7 +431,7 @@ The service requires specific environment variables to be configured. All config
 NEAR_RPC_URL=https://rpc.testnet.near.org
 NEAR_ACCOUNT_ID=dev-account.testnet
 NEAR_CONTRACT_ID=dev-ft.testnet
-NEAR_PRIVATE_KEY=ed25519:3D4YudUahN1nawWogh8pAKrqXG8BQn6KhGvXkY4VgPCaF
+NEAR_PRIVATE_KEYS=ed25519:3D4YudUahN1nawWogh8pAKrqXG8BQn6KhGvXkY4VgPCaF
 MAX_RETRIES=5
 DATABASE_PATH=:memory:
 NODE_ENV=development
@@ -442,7 +442,7 @@ NODE_ENV=development
 NEAR_RPC_URL=https://rpc.mainnet.near.org
 NEAR_ACCOUNT_ID=production-account.near
 NEAR_CONTRACT_ID=token.near
-NEAR_PRIVATE_KEY=ed25519:YOUR_PRODUCTION_KEY_HERE
+NEAR_PRIVATE_KEYS=ed25519:YOUR_PRODUCTION_KEY_HERE
 MAX_RETRIES=3
 DATABASE_PATH=./data/transfers.db
 NODE_ENV=production
@@ -467,10 +467,11 @@ Please check your .env file and ensure all required variables are set correctly.
 
 ### Important Notes
 
-1. **Private Key Security**:
+1. **Private Keys Security**:
    - Never commit `.env` files to version control
    - Use `.env.example` as a template
    - In production, use secrets management (e.g., AWS Secrets Manager, HashiCorp Vault)
+   - Multiple keys enable parallel transaction processing (number of keys = concurrency level)
 
 2. **Database Persistence**:
    - `:memory:` means data is lost on restart (good for development/testing)
@@ -676,7 +677,7 @@ new Executor(queue, {
   rpcUrl: string,              // NEAR RPC endpoint
   accountId: string,           // Sender account
   contractId: string,          // FT contract
-  privateKey: string,          // Sender private key
+  privateKeys: string[],       // Array of sender private keys (determines concurrency)
   batchSize: 100,              // Max items per batch (1-100)
   interval: 500,               // Polling interval in ms
   minQueueToProcess: 1,        // Min items before processing

@@ -14,9 +14,17 @@ const EnvSchema = z.object({
     .string()
     .min(1, "NEAR_CONTRACT_ID is required"),
 
-  NEAR_PRIVATE_KEY: z
+  NEAR_PRIVATE_KEYS: z
     .string()
-    .min(1, "NEAR_PRIVATE_KEY is required"),
+    .min(1, "NEAR_PRIVATE_KEYS is required")
+    .transform((val) => {
+      const keys = val.split(",").map(k => k.trim()).filter(k => k.length > 0);
+      if (keys.length === 0) {
+        throw new Error("At least one private key is required");
+      }
+      return keys;
+    })
+    .describe("Comma-separated list of private keys. Number of keys determines concurrency level."),
 
   MAX_RETRIES: z
     .string()
@@ -56,7 +64,7 @@ export interface ParsedEnvConfig {
   nearRpcUrl: string;
   nearAccountId: string;
   nearContractId: string;
-  nearPrivateKey: string;
+  nearPrivateKeys: string[];
   maxRetries: number;
   databasePath: string;
   nodeEnv: "development" | "production" | "test";
@@ -69,7 +77,7 @@ function validateEnv(): ParsedEnvConfig {
       NEAR_RPC_URL: process.env.NEAR_RPC_URL,
       NEAR_ACCOUNT_ID: process.env.NEAR_ACCOUNT_ID,
       NEAR_CONTRACT_ID: process.env.NEAR_CONTRACT_ID,
-      NEAR_PRIVATE_KEY: process.env.NEAR_PRIVATE_KEY,
+      NEAR_PRIVATE_KEYS: process.env.NEAR_PRIVATE_KEYS,
       MAX_RETRIES: process.env.MAX_RETRIES,
       DATABASE_PATH: process.env.DATABASE_PATH,
       NODE_ENV: process.env.NODE_ENV,
@@ -80,7 +88,7 @@ function validateEnv(): ParsedEnvConfig {
       nearRpcUrl: validated.NEAR_RPC_URL,
       nearAccountId: validated.NEAR_ACCOUNT_ID,
       nearContractId: validated.NEAR_CONTRACT_ID,
-      nearPrivateKey: validated.NEAR_PRIVATE_KEY,
+      nearPrivateKeys: validated.NEAR_PRIVATE_KEYS,
       maxRetries: validated.MAX_RETRIES,
       databasePath: validated.DATABASE_PATH,
       nodeEnv: validated.NODE_ENV,
@@ -117,7 +125,9 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   nearRpcUrl: env.nearRpcUrl,
   nearAccountId: env.nearAccountId,
   nearContractId: env.nearContractId,
-  nearPrivateKey: "***REDACTED***",
+  nearPrivateKeys: "***REDACTED***",
+  privateKeysCount: env.nearPrivateKeys.length,
+  concurrency: env.nearPrivateKeys.length,
   maxRetries: env.maxRetries,
   databasePath: env.databasePath,
   nodeEnv: env.nodeEnv,

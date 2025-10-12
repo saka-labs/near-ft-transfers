@@ -21,7 +21,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test-account.testnet";
     process.env.NEAR_CONTRACT_ID = "usdt.tether-token.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.MAX_RETRIES = "10";
     process.env.NODE_ENV = "test";
 
@@ -30,7 +30,7 @@ describe("Environment Configuration Utility", () => {
     expect(env.nearRpcUrl).toBe("https://rpc.testnet.near.org");
     expect(env.nearAccountId).toBe("test-account.testnet");
     expect(env.nearContractId).toBe("usdt.tether-token.testnet");
-    expect(env.nearPrivateKey).toBe("ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL");
+    expect(env.nearPrivateKeys).toEqual(["ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL"]);
     expect(env.maxRetries).toBe(10);
     expect(env.nodeEnv).toBe("test");
   });
@@ -39,7 +39,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     delete process.env.MAX_RETRIES;
 
     const { env } = await import("../src/env");
@@ -51,7 +51,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     delete process.env.NODE_ENV;
 
     const { env } = await import("../src/env");
@@ -63,7 +63,7 @@ describe("Environment Configuration Utility", () => {
     delete process.env.NEAR_RPC_URL;
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
 
     expect(async () => {
       await import("../src/env");
@@ -74,7 +74,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "not-a-valid-url";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
 
     expect(async () => {
       await import("../src/env");
@@ -85,18 +85,18 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     delete process.env.NEAR_ACCOUNT_ID;
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
 
     expect(async () => {
       await import("../src/env");
     }).toThrow();
   });
 
-  test("should throw error when NEAR_PRIVATE_KEY is missing", async () => {
+  test("should throw error when NEAR_PRIVATE_KEYS is missing", async () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    delete process.env.NEAR_PRIVATE_KEY;
+    delete process.env.NEAR_PRIVATE_KEYS;
 
     expect(async () => {
       await import("../src/env");
@@ -107,7 +107,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.MAX_RETRIES = "not-a-number";
 
     expect(async () => {
@@ -119,7 +119,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.MAX_RETRIES = "-1";
 
     expect(async () => {
@@ -131,7 +131,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.MAX_RETRIES = "101";
 
     expect(async () => {
@@ -153,7 +153,7 @@ describe("Environment Configuration Utility", () => {
       process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
       process.env.NEAR_ACCOUNT_ID = accountId;
       process.env.NEAR_CONTRACT_ID = "contract.testnet";
-      process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+      process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
 
       // Clear module cache
       delete require.cache[require.resolve("../src/env")];
@@ -163,16 +163,16 @@ describe("Environment Configuration Utility", () => {
     }
   });
 
-  test("getSafeEnvInfo should redact private key", async () => {
+  test("getSafeEnvInfo should redact private keys", async () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
 
     const { getSafeEnvInfo } = await import("../src/env");
     const safeInfo = getSafeEnvInfo();
 
-    expect(safeInfo.nearPrivateKey).toBe("***REDACTED***");
+    expect(safeInfo.nearPrivateKeys).toBe("***REDACTED***");
     expect(safeInfo.nearAccountId).toBe("test.testnet");
     expect(safeInfo.nearRpcUrl).toBe("https://rpc.testnet.near.org");
   });
@@ -181,7 +181,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.NODE_ENV = "production";
 
     const { isProduction } = await import("../src/env");
@@ -192,7 +192,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.NODE_ENV = "development";
 
     const { isDevelopment } = await import("../src/env");
@@ -203,7 +203,7 @@ describe("Environment Configuration Utility", () => {
     process.env.NEAR_RPC_URL = "https://rpc.testnet.near.org";
     process.env.NEAR_ACCOUNT_ID = "test.testnet";
     process.env.NEAR_CONTRACT_ID = "contract.testnet";
-    process.env.NEAR_PRIVATE_KEY = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
+    process.env.NEAR_PRIVATE_KEYS = "ed25519:5JueXZhEEVqGVT5powZ5twyPP8sbRRYQ5JuCpq6WGkpgPFfE4M8HxpZJ5trvhj8Y7qRvZYzMvNmF8B2bTTvVhqYL";
     process.env.NODE_ENV = "test";
 
     const { isTest } = await import("../src/env");

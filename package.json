@@ -18,10 +18,12 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@eclipseeer/near-api-ts": "^0.2.0",
     "@hono/swagger-ui": "^0.5.2",
     "@hono/zod-openapi": "^1.1.3",
     "@near-js/accounts": "^2.3.3",
     "@near-js/crypto": "^2.3.3",
+    "@near-js/jsonrpc-types": "^1.4.0",
     "@near-js/providers": "^2.3.3",
     "@near-js/signers": "^2.3.3",
     "@near-js/tokens": "^2.3.3",
@@ -31,5 +33,8 @@
     "hono": "^4.9.9",
     "near-sandbox": "^0.2.0",
     "zod": "^4.1.11"
+  },
+  "patchedDependencies": {
+    "@eclipseeer/near-api-ts@0.2.0": "patches/@eclipseeer%2Fnear-api-ts@0.2.0.patch"
   }
 }

@@ -164,7 +164,7 @@ describe("Executor - Basic Batch Processing", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -209,7 +209,7 @@ describe("Executor - Basic Batch Processing", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       batchSize: 3,
     });
     await executor.start();
@@ -253,7 +253,7 @@ describe("Executor - Basic Batch Processing", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -380,7 +380,7 @@ describe("Executor - Recovery Mechanism", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
     await executor.waitUntilIdle();
@@ -433,7 +433,7 @@ describe("Executor - Batch Failure and Retry", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       interval: 100,
     });
 
@@ -466,7 +466,7 @@ describe("Executor - Batch Failure and Retry", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       interval: 100,
     });
 
@@ -516,7 +516,7 @@ describe("Executor - Queue Merging Behavior", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -568,7 +568,7 @@ describe("Executor - Queue Merging Behavior", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -634,7 +634,7 @@ describe("Executor - MinQueueToProcess Threshold", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       minQueueToProcess: 5,
       interval: 100,
     });
@@ -675,7 +675,7 @@ describe("Executor - MinQueueToProcess Threshold", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       minQueueToProcess: 5,
       interval: 100,
     });
@@ -736,7 +736,7 @@ describe("Executor - Storage Deposit Handling", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -784,7 +784,7 @@ describe("Executor - Storage Deposit Handling", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
       batchSize: 100, // Try to process 100 items
     });
     await executor.start();
@@ -820,7 +820,7 @@ describe("Executor - Storage Deposit Handling", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -892,7 +892,7 @@ describe("Executor - Batch Transaction Storage", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
@@ -920,7 +920,7 @@ describe("Executor - Batch Transaction Storage", () => {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      privateKey: accountAKeyPair.toString(),
+      privateKeys: [accountAKeyPair.toString()],
     });
     await executor.start();
 
