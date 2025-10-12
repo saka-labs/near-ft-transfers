@@ -60,7 +60,7 @@ export class Queue extends EventEmitter {
       CREATE TABLE IF NOT EXISTS batch_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tx_hash TEXT NOT NULL,
-        signed_tx BLOB,
+        signed_tx string,
         status TEXT NOT NULL DEFAULT 'pending',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -142,7 +142,7 @@ export class Queue extends EventEmitter {
 
   createSignedTransaction(
     txHash: string,
-    signedTx: Uint8Array,
+    signedTx: string,
     queueIds: number[],
   ): number {
     const now = Date.now();
@@ -317,7 +317,7 @@ export class Queue extends EventEmitter {
   getPendingBatchTransactions(): Array<{
     id: number;
     tx_hash: string;
-    signed_tx: Uint8Array;
+    signed_tx: string;
     queue_ids: number[];
   }> {
     // Get all pending/processing batch transactions
@@ -328,7 +328,7 @@ export class Queue extends EventEmitter {
       .all(QueueStatus.PROCESSING) as Array<{
         id: number;
         tx_hash: string;
-        signed_tx: Uint8Array;
+        signed_tx: string;
       }>;
 
     // For each batch transaction, get the associated queue item IDs

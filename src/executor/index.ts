@@ -9,7 +9,8 @@ import {
   mainnet,
   createMemorySigner,
   functionCall,
-} from '@eclipseeer/near-api-ts';
+} from "@eclipseeer/near-api-ts";
+import type { SignedTransaction } from "@near-js/transactions";
 
 export type ExecutorOptions = {
   rpcUrl: string;
@@ -87,16 +88,24 @@ export class Executor extends EventEmitter {
 
     this.maxConcurrency = this.options.privateKeys.length;
 
-    console.info(`Executor initialized with ${this.options.privateKeys.length} signing key(s) (concurrency: ${this.maxConcurrency})`);
+    console.info(
+      `Executor initialized with ${this.options.privateKeys.length} signing key(s) (concurrency: ${this.maxConcurrency})`,
+    );
 
     const network = this.getNetworkConfig();
     this.client = createClient({ network });
   }
 
   private getNetworkConfig() {
-    if (this.options.rpcUrl.includes('testnet') || this.options.rpcUrl.includes('test')) {
+    if (
+      this.options.rpcUrl.includes("testnet") ||
+      this.options.rpcUrl.includes("test")
+    ) {
       return testnet;
-    } else if (this.options.rpcUrl.includes('localhost') || this.options.rpcUrl.includes('127.0.0.1')) {
+    } else if (
+      this.options.rpcUrl.includes("localhost") ||
+      this.options.rpcUrl.includes("127.0.0.1")
+    ) {
       return {
         rpcs: {
           regular: [{ url: this.options.rpcUrl }],
@@ -114,7 +123,7 @@ export class Executor extends EventEmitter {
     console.info(`Initializing signer with ${privateKeys.length} key(s)...`);
 
     const keyService = await createMemoryKeyService({
-      keySources: privateKeys.map(key => ({ privateKey: key as any })),
+      keySources: privateKeys.map((key) => ({ privateKey: key as any })),
     });
 
     this.signer = await createMemorySigner({
@@ -123,14 +132,16 @@ export class Executor extends EventEmitter {
       keyService,
     });
 
-    console.info(`Signer initialized successfully with ${privateKeys.length} key(s) in pool`);
+    console.info(
+      `Signer initialized successfully with ${privateKeys.length} key(s) in pool`,
+    );
   }
 
   async start() {
     if (this.isRunning) return;
 
     await this.initializeSigner();
-    await this.recoverProcessingTransactions();
+    // await this.recoverProcessingTransactions();
     this.queue.recover();
     this.isRunning = true;
     this.run();
@@ -152,13 +163,24 @@ export class Executor extends EventEmitter {
           `Re-broadcasting transaction ${batch.tx_hash} for queue items [${batch.queue_ids.join(", ")}]`,
         );
 
-        // TODO: Implement recovery logic near-api-ts
-        // Mark the batch as failed so items can be retried
-        this.queue.recoverFailedBatch(
-          batch.id,
-          "Recovery not supported with near-api-ts yet - marking for retry",
-          this.options.maxRetries,
+        const signedTx: any = JSON.parse(batch.signed_tx);
+
+        const result = await this.client.sendSignedTransaction({
+          signedTransaction: signedTx,
+        });
+        const validation = this.validateTransactionResult(result, batch.id);
+        if (!validation.isValid) {
+          console.error(
+            `Re-broadcast transaction ${batch.tx_hash} failed validation: ${validation.errorMessage}`,
+          );
+          continue;
+        }
+
+        console.info(
+          `Successfully re-broadcast transaction: ${signedTx.transactionHash}`,
         );
+
+        this.queue.markBatchSuccess(batch.id, signedTx.transactionHash);
       } catch (error) {
         await this.handleBroadcastError(
           error,
@@ -294,14 +316,14 @@ export class Executor extends EventEmitter {
 
       batchId = this.queue.createSignedTransaction(
         signedTx.transactionHash,
-        signedTx.signature as any,
+        JSON.stringify(signedTx),
         itemIds,
       );
 
       // Execute transaction using near-api-ts
       const result = await this.client.sendSignedTransaction({
-        signedTransaction: signedTx
-      })
+        signedTransaction: signedTx,
+      });
 
       // Validate transaction result
       const validation = this.validateTransactionResult(result, batchId, items);
@@ -391,8 +413,8 @@ export class Executor extends EventEmitter {
       );
     }
 
-    if (errorMessage.toLowerCase().includes('rate limit')) {
-      console.info('Rate limit exceeded, sleeping for 5 seconds');
+    if (errorMessage.toLowerCase().includes("rate limit")) {
+      console.info("Rate limit exceeded, sleeping for 5 seconds");
       await sleep(5000);
     }
 
@@ -416,7 +438,7 @@ export class Executor extends EventEmitter {
             registration_only: true,
           },
           attachedDeposit: { yoctoNear: 1250000000000000000000n }, // 0.00125 NEAR
-          gasLimit: { teraGas: '3' }, // 3 TGas
+          gasLimit: { teraGas: "3" }, // 3 TGas
         }),
       );
     }
@@ -431,7 +453,7 @@ export class Executor extends EventEmitter {
           memo,
         },
         attachedDeposit: { yoctoNear: 1n }, // 1 yoctoNEAR
-        gasLimit: { teraGas: '3' }, // 3 TGas
+        gasLimit: { teraGas: "3" }, // 3 TGas
       }),
     );
 

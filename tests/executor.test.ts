@@ -368,7 +368,7 @@ describe("Executor - Recovery Mechanism", () => {
     // Store signed transaction without broadcasting (simulating crash)
     queue.createSignedTransaction(
       signedHash,
-      signed.encode(),
+      "",
       items.map((i) => i.id),
     );
 
