@@ -16,8 +16,10 @@ import {
   afterAll,
   beforeEach,
 } from "bun:test";
+import { sleep } from "bun";
 
 let sandbox: Awaited<ReturnType<typeof Sandbox.start>>;
+let provider: Provider
 let accountA: Account;
 let accountB: Account;
 let accountC: Account;
@@ -33,7 +35,7 @@ beforeAll(async () => {
   });
 
   console.info(`Sandbox RPC available at: ${sandbox.rpcUrl}`);
-  const provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
+  provider = new JsonRpcProvider({ url: sandbox.rpcUrl }) as Provider;
   const keyPair = KeyPair.fromString(DEFAULT_PRIVATE_KEY);
 
   defaultAccount = new Account(
@@ -160,19 +162,20 @@ describe("Executor - Basic Batch Processing", () => {
   });
 
   test("should process single batch successfully", async () => {
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
+
     executor = new Executor(queue, {
       rpcUrl: sandbox.rpcUrl,
       accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       privateKeys: [accountAKeyPair.toString()],
     });
+    await sleep(1000)
     await executor.start();
-
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
 
     // Push 5 transfers
     for (let i = 0; i < 5; i++) {
@@ -184,11 +187,11 @@ describe("Executor - Basic Batch Processing", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(5);
@@ -197,7 +200,7 @@ describe("Executor - Basic Batch Processing", () => {
     expect(stats.processing).toBe(0);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 500n
+      BigInt(initialBalance!.toString()) + 500n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -214,11 +217,11 @@ describe("Executor - Basic Batch Processing", () => {
     });
     await executor.start();
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     // Push 10 transfers (should create 4 batches: 3+3+3+1)
     for (let i = 0; i < 10; i++) {
@@ -230,18 +233,18 @@ describe("Executor - Basic Batch Processing", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(10);
     expect(stats.failed).toBe(0);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 100n
+      BigInt(initialBalance!.toString()) + 100n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -257,17 +260,17 @@ describe("Executor - Basic Batch Processing", () => {
     });
     await executor.start();
 
-    const initialBalanceB = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalanceB = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
-    const initialBalanceC = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalanceC = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     queue.push({
       receiver_account_id: `account-b.${DEFAULT_ACCOUNT_ID}`,
@@ -280,26 +283,26 @@ describe("Executor - Basic Batch Processing", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalanceB = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalanceB = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
-    const finalBalanceC = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalanceC = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(2);
 
     const expectedBalanceB = (
-      BigInt(initialBalanceB.toString()) + 200n
+      BigInt(initialBalanceB!.toString()) + 200n
     ).toString();
     const expectedBalanceC = (
-      BigInt(initialBalanceC.toString()) + 300n
+      BigInt(initialBalanceC!.toString()) + 300n
     ).toString();
     expect(finalBalanceB).toBe(expectedBalanceB);
     expect(finalBalanceC).toBe(expectedBalanceC);
@@ -369,11 +372,11 @@ describe("Executor - Recovery Mechanism", () => {
       items.map((i) => i.id),
     );
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     // Now start executor - it should recover the pending transaction
     executor = new Executor(queue, {
@@ -385,11 +388,11 @@ describe("Executor - Recovery Mechanism", () => {
     await executor.start();
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(1);
@@ -397,7 +400,7 @@ describe("Executor - Recovery Mechanism", () => {
     expect(stats.processing).toBe(0);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 500n
+      BigInt(initialBalance!.toString()) + 500n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -520,11 +523,11 @@ describe("Executor - Queue Merging Behavior", () => {
     });
     await executor.start();
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     // Push multiple transfers to same account
     queue.push({
@@ -542,18 +545,18 @@ describe("Executor - Queue Merging Behavior", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     // Should only process 1 item (merged)
     expect(stats.success).toBe(1);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 600n
+      BigInt(initialBalance!.toString()) + 600n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -572,11 +575,11 @@ describe("Executor - Queue Merging Behavior", () => {
     });
     await executor.start();
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     // Push multiple transfers to same account
     queue.push({
@@ -594,18 +597,18 @@ describe("Executor - Queue Merging Behavior", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     // Should process 3 separate items
     expect(stats.success).toBe(3);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 600n
+      BigInt(initialBalance!.toString()) + 600n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -681,11 +684,11 @@ describe("Executor - MinQueueToProcess Threshold", () => {
     });
     await executor.start();
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     // Push exactly 5 items (meets threshold)
     for (let i = 0; i < 5; i++) {
@@ -697,17 +700,17 @@ describe("Executor - MinQueueToProcess Threshold", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(5);
 
     const expectedBalance = (
-      BigInt(initialBalance.toString()) + 500n
+      BigInt(initialBalance!.toString()) + 500n
     ).toString();
     expect(finalBalance).toBe(expectedBalance);
 
@@ -740,11 +743,11 @@ describe("Executor - Storage Deposit Handling", () => {
     });
     await executor.start();
 
-    const initialBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const initialBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     expect(initialBalance).toBe("0");
 
@@ -757,22 +760,22 @@ describe("Executor - Storage Deposit Handling", () => {
 
     await executor.waitUntilIdle();
 
-    const finalBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const finalBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     const stats = queue.getStats();
     expect(stats.success).toBe(1);
     expect(finalBalance).toBe("1000");
 
     // Verify storage deposit was registered
-    const storageBalance = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "storage_balance_of",
-      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const storageBalance = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "storage_balance_of",
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+    );
 
     expect(storageBalance).not.toBeNull();
 
@@ -847,25 +850,25 @@ describe("Executor - Storage Deposit Handling", () => {
     expect(stats.success).toBe(3);
 
     // Verify all transfers succeeded
-    const balanceB = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
-    });
-    const balanceD = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
-    });
-    const balanceC = await accountA.callFunction({
-      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
-      methodName: "ft_balance_of",
-      args: { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
-    });
+    const balanceB = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+    );
+    const balanceD = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+    );
+    const balanceC = await provider.callFunction(
+      `account-a.${DEFAULT_ACCOUNT_ID}`,
+      "ft_balance_of",
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+    );
 
-    expect(BigInt(balanceB.toString())).toBeGreaterThanOrEqual(100n);
-    expect(BigInt(balanceD.toString())).toBeGreaterThanOrEqual(200n);
-    expect(BigInt(balanceC.toString())).toBeGreaterThanOrEqual(300n);
+    expect(BigInt(balanceB!.toString())).toBeGreaterThanOrEqual(100n);
+    expect(BigInt(balanceD!.toString())).toBeGreaterThanOrEqual(200n);
+    expect(BigInt(balanceC!.toString())).toBeGreaterThanOrEqual(300n);
 
     executor.stop();
   }, 30000);

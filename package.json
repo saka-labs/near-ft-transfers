@@ -6,7 +6,8 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run src/index.ts --watch",
-    "test:executor": "mkdir -p .tmp && TMPDIR=.tmp bun test tests/executor.test.ts",
+    "test": "bun test --timeout 10000",
+    "test:executor": "mkdir -p .tmp && TMPDIR=.tmp bun test --timeout 10000 tests/executor.test.ts",
     "bench:executor:sandbox": "mkdir -p .tmp && TMPDIR=.tmp bun run bench/executor-sandbox.bench.ts",
     "bench:executor:testnet": "mkdir -p .tmp && TMPDIR=.tmp bun run bench/executor-testnet.bench.ts",
     "bench:queue": "mkdir -p .tmp && TMPDIR=.tmp bun run bench/queue.bench.ts"
