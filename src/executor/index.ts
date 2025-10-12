@@ -170,7 +170,7 @@ export class Executor extends EventEmitter {
         await this.handleBroadcastError(
           error,
           batch.id,
-          `Failed to re-broadcast transaction ${batch.tx_hash}`,
+          `Failed to re-broadcast transaction ${batch.tx_hash}: Not implemented, will be retried on the next batch`,
         );
       }
     }

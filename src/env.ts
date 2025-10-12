@@ -51,6 +51,26 @@ const EnvSchema = z.object({
     .default(":memory:")
     .describe("Database file path. Use ':memory:' for in-memory database (default)"),
 
+  // Server configuration
+  PORT: z
+    .string()
+    .optional()
+    .default("3000")
+    .transform((val) => {
+      const parsed = parseInt(val, 10);
+      if (isNaN(parsed)) {
+        throw new Error("PORT must be a valid integer");
+      }
+      if (parsed < 1) {
+        throw new Error("PORT must be between 1 and 65535");
+      }
+      if (parsed > 65535) {
+        throw new Error("PORT must be between 1 and 65535");
+      }
+      return parsed;
+    })
+    .describe("Port for the HTTP server"),
+
   // Optional: Node environment
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -67,6 +87,7 @@ export interface ParsedEnvConfig {
   nearPrivateKeys: string[];
   maxRetries: number;
   databasePath: string;
+  port: number;
   nodeEnv: "development" | "production" | "test";
 }
 
@@ -80,6 +101,7 @@ function validateEnv(): ParsedEnvConfig {
       NEAR_PRIVATE_KEYS: process.env.NEAR_PRIVATE_KEYS,
       MAX_RETRIES: process.env.MAX_RETRIES,
       DATABASE_PATH: process.env.DATABASE_PATH,
+      PORT: process.env.PORT,
       NODE_ENV: process.env.NODE_ENV,
     });
 
@@ -91,6 +113,7 @@ function validateEnv(): ParsedEnvConfig {
       nearPrivateKeys: validated.NEAR_PRIVATE_KEYS,
       maxRetries: validated.MAX_RETRIES,
       databasePath: validated.DATABASE_PATH,
+      port: validated.PORT,
       nodeEnv: validated.NODE_ENV,
     };
   } catch (error) {
@@ -130,5 +153,6 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   concurrency: env.nearPrivateKeys.length,
   maxRetries: env.maxRetries,
   databasePath: env.databasePath,
+  port: env.port,
   nodeEnv: env.nodeEnv,
 });
