@@ -141,7 +141,7 @@ export class Executor extends EventEmitter {
     if (this.isRunning) return;
 
     await this.initializeSigner();
-    // await this.recoverProcessingTransactions();
+    await this.recoverProcessingTransactions();
     this.queue.recover();
     this.isRunning = true;
     this.run();
@@ -163,24 +163,10 @@ export class Executor extends EventEmitter {
           `Re-broadcasting transaction ${batch.tx_hash} for queue items [${batch.queue_ids.join(", ")}]`,
         );
 
-        const signedTx: any = JSON.parse(batch.signed_tx);
-
-        const result = await this.client.sendSignedTransaction({
-          signedTransaction: signedTx,
-        });
-        const validation = this.validateTransactionResult(result, batch.id);
-        if (!validation.isValid) {
-          console.error(
-            `Re-broadcast transaction ${batch.tx_hash} failed validation: ${validation.errorMessage}`,
-          );
-          continue;
-        }
-
-        console.info(
-          `Successfully re-broadcast transaction: ${signedTx.transactionHash}`,
+        // TODO: handle recovery of signedTx for re-broadcast
+        throw new Error(
+          "Not implemented: recovery of signedTx for re-broadcast",
         );
-
-        this.queue.markBatchSuccess(batch.id, signedTx.transactionHash);
       } catch (error) {
         await this.handleBroadcastError(
           error,
@@ -316,7 +302,7 @@ export class Executor extends EventEmitter {
 
       batchId = this.queue.createSignedTransaction(
         signedTx.transactionHash,
-        JSON.stringify(signedTx),
+        "", // TODO: save signedTx for later recovery
         itemIds,
       );
 

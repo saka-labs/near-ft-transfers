@@ -60,7 +60,7 @@ export class Queue extends EventEmitter {
       CREATE TABLE IF NOT EXISTS batch_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tx_hash TEXT NOT NULL,
-        signed_tx string,
+        signed_tx TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
