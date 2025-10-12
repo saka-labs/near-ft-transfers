@@ -20,6 +20,10 @@ async function runBenchmark() {
   // Add more keys to increase concurrency
   const NEAR_PRIVATE_KEYS = [
     "ed25519:5uGZbkwRcgjp6w93koFMDcgnx5t5XA8FwsFGsEtig5sZbgXccgMLe21KzxMEzxeZ5LAsSHECoCuB6LBXrpSWz83C",
+    "ed25519:sfkBU9ZpnQsNrKdiPb6YEW5pGPanTmM5ALbs6PuMpju4TsNF9DdUyqps4o13G8LJCN7aj9wNcHHgU1Z72JrsvXn",
+    "ed25519:Zv6Dfto81Sg13qwiVodmsuw6HxuHopQ2vmv4EcYpGu1XVopyEDDiFfLGLQbWEjCkQe7aVPPdLRFkbbHd15BYDBE",
+    "ed25519:5RJDsf6HHarQfPXCTC8PVEPTnFDUmZLDwbzqDxYyYkWAoptn4XALHpdo3zTkLH7eZ8w8ZRRQrCpc2jLoLRuNGjqZ",
+    "ed25519:5WYfWKUQmERmjrP3Y39Q9dNrtvENMkZ9urQ3i13kGKxsesYdAkWTsaB6yabYmXK6ioCFnVM6PUHJXtwE1JGNVKBz"
     // Add more private keys here for parallel processing:
     // "ed25519:YourSecondKey...",
     // "ed25519:YourThirdKey...",

@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  near-ft-service:
+    build: .
+    container_name: near-ft-transfers
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEAR_RPC_URL=${NEAR_RPC_URL}
+      - NEAR_ACCOUNT_ID=${NEAR_ACCOUNT_ID}
+      - NEAR_CONTRACT_ID=${NEAR_CONTRACT_ID}
+      - NEAR_PRIVATE_KEYS=${NEAR_PRIVATE_KEYS}
+      - MAX_RETRIES=${MAX_RETRIES:-5}
+      - DATABASE_PATH=/app/data/transfers.db
+      - PORT=3000
+    volumes:
+      - ./data:/app/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/doc"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: near-ft-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/cache:/var/cache/nginx
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - near-ft-service
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  near-ft-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

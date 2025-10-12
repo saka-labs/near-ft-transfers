@@ -15,7 +15,7 @@ async function runBenchmark() {
   const AMOUNT_PER_TRANSFER = 100;
   const BATCH_SIZE = 100;
   const RPC_PORT = 45555;
-  const NUM_KEYS = 3; // Number of keys for parallel processing
+  const NUM_KEYS = 5; // Number of keys for parallel processing
 
   console.info("===== NEAR FT Transfer Benchmark =====");
   console.info(`Transfer count: ${TRANSFER_COUNT}`);
