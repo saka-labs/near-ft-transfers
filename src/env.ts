@@ -125,6 +125,7 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   nearRpcUrl: env.nearRpcUrl,
   nearAccountId: env.nearAccountId,
   nearContractId: env.nearContractId,
+  nearPrivateKeys: "***REDACTED***",
   privateKeysCount: env.nearPrivateKeys.length,
   concurrency: env.nearPrivateKeys.length,
   maxRetries: env.maxRetries,
