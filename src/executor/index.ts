@@ -380,8 +380,8 @@ export class Executor extends EventEmitter {
     batchId: number | undefined,
     context: string,
   ): Promise<string> {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`${context}:`, error);
+    const errorMessage = (error as any).message;
+    console.error(`${context}:`, JSON.stringify(error, null, 2));
 
     if (batchId) {
       this.queue.recoverFailedBatch(
@@ -391,7 +391,11 @@ export class Executor extends EventEmitter {
       );
     }
 
-    await sleep(5000);
+    if (errorMessage.toLowerCase().includes('rate limit')) {
+      console.info('Rate limit exceeded, sleeping for 5 seconds');
+      await sleep(5000);
+    }
+
     return errorMessage;
   }
 
