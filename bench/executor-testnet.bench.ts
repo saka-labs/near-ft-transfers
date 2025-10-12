@@ -104,6 +104,7 @@ async function runBenchmark() {
 
   // Report results
   console.info("\n===== BENCHMARK RESULTS =====");
+  console.info(`Keys used: ${NEAR_PRIVATE_KEYS.length}`);
   console.info(`Queue push time: ${pushTime}ms`);
   console.info(`Processing time: ${processingTime}ms`);
   console.info(`Total time: ${pushTime + processingTime}ms`);
