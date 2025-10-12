@@ -115,7 +115,7 @@ async function runBenchmark() {
 
     // Initialize queue and executor
     // Wait for 5 seconds to avoid invalid nonce error
-    sleep(5000);
+    await sleep(5000);
     const db = new Database(":memory:");
     const queue = new Queue(db, { mergeExistingAccounts: false });
 
