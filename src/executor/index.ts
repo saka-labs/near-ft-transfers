@@ -10,7 +10,6 @@ import {
   createMemorySigner,
   functionCall,
 } from "@eclipseeer/near-api-ts";
-import type { SignedTransaction } from "@near-js/transactions";
 
 export type ExecutorOptions = {
   rpcUrl: string;
