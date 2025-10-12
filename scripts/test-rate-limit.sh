@@ -3,7 +3,7 @@
 # Test rate limiting script for NEAR FT Transfers API
 # This script tests that the rate limiting (5 req/s) is working
 
-API_BASE="http://localhost"
+API_BASE="http://localhost:8080"
 TRANSFER_ENDPOINT="$API_BASE/transfer"
 DOC_ENDPOINT="$API_BASE/doc"
 

@@ -14,7 +14,8 @@ FROM base AS deps
 # will need to copy the bun.lockb and package.json if not using install
 RUN apk add --no-cache curl && bun add -g @types/bun
 RUN mkdir -p /app/src
-COPY package.json bun.lock* ./
+COPY package-docker.json package.json
+COPY bun.lock* ./
 RUN bun install --frozen-lockfile
 
 # Production image, copy all the source code and bun-lockb, and install
@@ -23,17 +24,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Create a non-root user
-RUN addgroup --system --gid 1001 bun
-RUN adduser --system --uid 1001 bun
-USER bun
+# Install curl for health check
+RUN apk add --no-cache curl
 
 # Copy installed dependencies
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
 
 # Copy source code
-COPY --chown=bun:bun . .
+COPY . .
 
 # Create data directory for SQLite database
 RUN mkdir -p /app/data
