@@ -33,5 +33,8 @@
     "hono": "^4.9.9",
     "near-sandbox": "^0.2.0",
     "zod": "^4.1.11"
+  },
+  "patchedDependencies": {
+    "@eclipseeer/near-api-ts@0.2.0": "patches/@eclipseeer%2Fnear-api-ts@0.2.0.patch"
   }
 }

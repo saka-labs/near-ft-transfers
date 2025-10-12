@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index 54ff19e551289e793be7cfcb4d83b0a56c2e0e4e..fe10fe853c4b1d9b6d5c5c37cd229af2ef80a98f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -14,7 +14,7 @@ var createSendRequest = (clientContext) => async ({ body }) => {
+     })
+   });
+   const { result, error } = await response.json();
+-  if (error) throw new Error(error, { cause: error });
++  if (error) throw error;
+   return result;
+ };
+ 
