@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: near-ft-transfers
+    pull_policy: always
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -14,7 +15,7 @@ services:
       - NEAR_CONTRACT_ID=${NEAR_CONTRACT_ID}
       - NEAR_PRIVATE_KEYS=${NEAR_PRIVATE_KEYS}
       - MAX_RETRIES=${MAX_RETRIES:-5}
-      - DATABASE_PATH=/app/data/transfers.db
+      - DATABASE_PATH=${DATABASE_PATH:-:memory:}
       - MIN_TRANSFER_AMOUNT=${MIN_TRANSFER_AMOUNT:-1}
       - MAX_TRANSFER_AMOUNT=${MAX_TRANSFER_AMOUNT:-1}
       - SKIP_ACCOUNT_EXISTENCE=${SKIP_ACCOUNT_EXISTENCE:-false}
@@ -23,40 +24,15 @@ services:
       - PORT=${PORT:-3000}
     volumes:
       - ./data:/app/data
-    networks:
-      - app-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/doc"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  nginx:
-    image: nginx:alpine
-    container_name: near-ft-nginx
-    restart: unless-stopped
     expose:
-      - "80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/cache:/var/cache/nginx
-      - ./nginx/logs:/var/log/nginx
-    depends_on:
-      - near-ft-service
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - 3000
 
 volumes:
   near-ft-data:
     driver: local
-
-networks:
-  app-network:
-    driver: bridge

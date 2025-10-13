@@ -397,7 +397,7 @@ export class Executor extends EventEmitter {
     let errorMessage: string;
 
     if ((error as any).message) {
-      errorMessage = (error as any).message;
+      errorMessage = JSON.stringify((error as any).message);
     } else {
       errorMessage = JSON.stringify(error);
     }
