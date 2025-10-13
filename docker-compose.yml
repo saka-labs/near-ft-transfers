@@ -15,7 +15,12 @@ services:
       - NEAR_PRIVATE_KEYS=${NEAR_PRIVATE_KEYS}
       - MAX_RETRIES=${MAX_RETRIES:-5}
       - DATABASE_PATH=/app/data/transfers.db
-      - PORT=3000
+      - MIN_TRANSFER_AMOUNT=${MIN_TRANSFER_AMOUNT:-1}
+      - MAX_TRANSFER_AMOUNT=${MAX_TRANSFER_AMOUNT:-1}
+      - SKIP_ACCOUNT_EXISTENCE=${SKIP_ACCOUNT_EXISTENCE:-false}
+      - SKIP_STORAGE_CHECK=${SKIP_STORAGE_CHECK:-false}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-3000}
     volumes:
       - ./data:/app/data
     networks:
