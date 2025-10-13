@@ -93,7 +93,7 @@ export class Queue extends EventEmitter {
         // Check if there's a pending transaction for the same account (batch_id is NULL means pending)
         const existing = this.db
           .query(
-            "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND batch_id IS NULL LIMIT 1",
+            "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND is_stalled = 0 AND batch_id IS NULL",
           )
           .get(transfer.receiver_account_id) as {
           id: number;
