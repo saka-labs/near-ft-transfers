@@ -96,24 +96,12 @@ export class Executor extends EventEmitter {
   }
 
   private getNetworkConfig() {
-    if (
-      this.options.rpcUrl.includes("testnet") ||
-      this.options.rpcUrl.includes("test")
-    ) {
-      return testnet;
-    } else if (
-      this.options.rpcUrl.includes("localhost") ||
-      this.options.rpcUrl.includes("127.0.0.1")
-    ) {
-      return {
-        rpcs: {
-          regular: [{ url: this.options.rpcUrl }],
-          archival: [{ url: this.options.rpcUrl }],
-        },
-      };
-    } else {
-      return mainnet;
-    }
+    return {
+      rpcs: {
+        regular: [{ url: this.options.rpcUrl }],
+        archival: [{ url: this.options.rpcUrl }],
+      },
+    };
   }
 
   private async initializeSigner() {
@@ -385,7 +373,7 @@ export class Executor extends EventEmitter {
       return { isValid: false, errorMessage };
     }
 
-    await sleep(1000)
+    await sleep(1000);
     return { isValid: false, errorMessage: "Unknown error" };
   }
 
