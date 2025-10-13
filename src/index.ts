@@ -455,12 +455,14 @@ app.get("/ui", swaggerUI({ url: "/doc" }));
 
 // Start server
 const port = env.port;
-console.log(`🚀 NEAR FT Transfers API server starting on port ${port}`);
-console.log(`📖 API Documentation: http://localhost:${port}/doc`);
-console.log(`🎨 Swagger UI: http://localhost:${port}/ui`);
-console.log(`🔧 Environment: ${env.nodeEnv}`);
+const host = env.host;
+console.info(`NEAR FT Transfers API server starting on ${host}:${port}`);
+console.info(`API Documentation: http://${host}:${port}/doc`);
+console.info(`Swagger UI: http://${host}:${port}/ui`);
+console.info(`Environment: ${env.nodeEnv}`);
 
 export default {
   port,
+  hostname: host,
   fetch: app.fetch,
 };

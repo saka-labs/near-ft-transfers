@@ -52,6 +52,12 @@ const EnvSchema = z.object({
     .describe("Database file path. Use ':memory:' for in-memory database (default)"),
 
   // Server configuration
+  HOST: z
+    .string()
+    .optional()
+    .default("0.0.0.0")
+    .describe("Host for the HTTP server"),
+
   PORT: z
     .string()
     .optional()
@@ -87,6 +93,7 @@ export interface ParsedEnvConfig {
   nearPrivateKeys: string[];
   maxRetries: number;
   databasePath: string;
+  host: string;
   port: number;
   nodeEnv: "development" | "production" | "test";
 }
@@ -101,6 +108,7 @@ function validateEnv(): ParsedEnvConfig {
       NEAR_PRIVATE_KEYS: process.env.NEAR_PRIVATE_KEYS,
       MAX_RETRIES: process.env.MAX_RETRIES,
       DATABASE_PATH: process.env.DATABASE_PATH,
+      HOST: process.env.HOST,
       PORT: process.env.PORT,
       NODE_ENV: process.env.NODE_ENV,
     });
@@ -113,6 +121,7 @@ function validateEnv(): ParsedEnvConfig {
       nearPrivateKeys: validated.NEAR_PRIVATE_KEYS,
       maxRetries: validated.MAX_RETRIES,
       databasePath: validated.DATABASE_PATH,
+      host: validated.HOST,
       port: validated.PORT,
       nodeEnv: validated.NODE_ENV,
     };
@@ -153,6 +162,7 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   concurrency: env.nearPrivateKeys.length,
   maxRetries: env.maxRetries,
   databasePath: env.databasePath,
+  host: env.host,
   port: env.port,
   nodeEnv: env.nodeEnv,
 });
