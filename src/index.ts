@@ -143,32 +143,31 @@ app.openapi(createTransfersRoute, async (c) => {
     ...new Set(transfers.map((t) => t.receiver_account_id)),
   ];
 
-  // const validations = await validator.validateBatch(uniqueAccountIds);
-  //
-  // const nonExistentAccounts = Object.entries(validations)
-  //   .filter(([_, result]) => !result.accountExists)
-  //   .map(([accountId, result]) => ({ accountId, error: result.error }));
-  //
-  // if (nonExistentAccounts.length > 0) {
-  //   return c.json(
-  //     {
-  //       error: "One or more accounts do not exist on NEAR",
-  //       invalid_accounts: nonExistentAccounts,
-  //     },
-  //     400,
-  //   );
-  // }
+  const validations = await validator.validateBatch(uniqueAccountIds);
+
+  const nonExistentAccounts = Object.entries(validations)
+    .filter(([_, result]) => !result.accountExists)
+    .map(([accountId, result]) => ({ accountId, error: result.error }));
+
+  if (nonExistentAccounts.length > 0) {
+    return c.json(
+      {
+        error: "One or more accounts do not exist on NEAR",
+        invalid_accounts: nonExistentAccounts,
+      },
+      400,
+    );
+  }
 
   const transferIds: number[] = [];
 
   for (const transfer of transfers) {
-    // const validation = validations[transfer.receiver_account_id];
-    // const hasDeposit = validation?.hasStorageDeposit || false;
+    const validation = validations[transfer.receiver_account_id];
+    const hasDeposit = validation?.hasStorageDeposit || false;
 
     const transferId = queue.push({
       ...transfer,
-      // has_storage_deposit: hasDeposit,
-      has_storage_deposit: false,
+      has_storage_deposit: hasDeposit,
     });
 
     transferIds.push(transferId);
