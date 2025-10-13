@@ -311,7 +311,11 @@ export class Executor extends EventEmitter {
       });
 
       // Validate transaction result
-      const validation = this.validateTransactionResult(result, batchId, items);
+      const validation = await this.validateTransactionResult(
+        result,
+        batchId,
+        items,
+      );
       if (!validation.isValid) {
         this.emit("batchFailed", items.length, validation.errorMessage!);
         return;
@@ -332,11 +336,11 @@ export class Executor extends EventEmitter {
     }
   }
 
-  private validateTransactionResult(
+  private async validateTransactionResult(
     result: any,
     batchId: number,
     items?: QueueItem[],
-  ): { isValid: boolean; errorMessage?: string } {
+  ): Promise<{ isValid: boolean; errorMessage?: string }> {
     const status = result.status as TransactionStatus;
     if (!status.Failure) {
       return { isValid: true };
@@ -366,6 +370,7 @@ export class Executor extends EventEmitter {
         );
       }
 
+      await sleep(1000);
       return { isValid: false, errorMessage };
     }
 
@@ -376,10 +381,12 @@ export class Executor extends EventEmitter {
         errorMessage,
         this.options.maxRetries,
       );
+      await sleep(1000);
       return { isValid: false, errorMessage };
     }
 
-    return { isValid: true };
+    await sleep(1000)
+    return { isValid: false, errorMessage: "Unknown error" };
   }
 
   private async handleBroadcastError(
@@ -423,6 +430,8 @@ export class Executor extends EventEmitter {
         withoutRetryCount,
       );
     }
+
+    await sleep(1000);
 
     return errorMessage;
   }
