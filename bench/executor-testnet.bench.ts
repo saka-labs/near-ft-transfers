@@ -13,17 +13,17 @@ async function runBenchmark() {
 
   // Provide your own NEAR account details here
   const RPC_URL = "https://test.rpc.fastnear.com";
-  const NEAR_ACCOUNT_ID = "jinakmerpati.testnet";
-  const NEAR_CONTRACT_ID = "jinakmerpati.testnet";
+  const NEAR_ACCOUNT_ID = "saka-labs.testnet";
+  const NEAR_CONTRACT_ID = "saka-labs.testnet";
 
   // Multiple private keys for parallel processing
   // Add more keys to increase concurrency
   const NEAR_PRIVATE_KEYS = [
-    "ed25519:5uGZbkwRcgjp6w93koFMDcgnx5t5XA8FwsFGsEtig5sZbgXccgMLe21KzxMEzxeZ5LAsSHECoCuB6LBXrpSWz83C",
-    "ed25519:sfkBU9ZpnQsNrKdiPb6YEW5pGPanTmM5ALbs6PuMpju4TsNF9DdUyqps4o13G8LJCN7aj9wNcHHgU1Z72JrsvXn",
-    "ed25519:Zv6Dfto81Sg13qwiVodmsuw6HxuHopQ2vmv4EcYpGu1XVopyEDDiFfLGLQbWEjCkQe7aVPPdLRFkbbHd15BYDBE",
-    "ed25519:5RJDsf6HHarQfPXCTC8PVEPTnFDUmZLDwbzqDxYyYkWAoptn4XALHpdo3zTkLH7eZ8w8ZRRQrCpc2jLoLRuNGjqZ",
-    "ed25519:5WYfWKUQmERmjrP3Y39Q9dNrtvENMkZ9urQ3i13kGKxsesYdAkWTsaB6yabYmXK6ioCFnVM6PUHJXtwE1JGNVKBz"
+    "ed25519:24VKtS9FZCR1pMgj2q3mAHcrrqC1pAaNbXwPWru86Jqm3fCLkBmqs8U3kq8o6ToEo9uZiJe6AaK9kcZPTwZJPo34",
+    "ed25519:3cL4t9ZLznwJAJ2unVFigSwWoYxavTrJnCGPoWjtnq1YWCbg4BQYNdhvxW9md7qfpwUan7eCJesmsqMQdnaJRhxf",
+    "ed25519:588epj9ZMhdYhqwmpqWvoxu4GeL1CS9QzF6BMQsQkpUMyj6SzeBe2V4tFwT7N9YqWCbuc5HagTD9fjUpTFHa4XZs",
+    "ed25519:4PHTkvVJVJCXHm1bTjNqk43GsrhJgj9FYbzd9Qe248Vc5Eiitp4QWpmr2x1L8gnYcyC5Z7GDPku6DTdkZKFjoj7d",
+    "ed25519:K9aE4rmsk4N5GZX2oe98u2sJ3cyieoyT5JDJjhdWAPz6tpH8NKBGpf54XoY6hSw5RxRQBobULXSbhtiRJQEYQ1i"
     // Add more private keys here for parallel processing:
     // "ed25519:YourSecondKey...",
     // "ed25519:YourThirdKey...",

@@ -19,7 +19,7 @@ import {
 import { sleep } from "bun";
 
 let sandbox: Awaited<ReturnType<typeof Sandbox.start>>;
-let provider: Provider
+let provider: Provider;
 let accountA: Account;
 let accountB: Account;
 let accountC: Account;
@@ -165,7 +165,7 @@ describe("Executor - Basic Batch Processing", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     executor = new Executor(queue, {
@@ -174,7 +174,7 @@ describe("Executor - Basic Batch Processing", () => {
       contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
       privateKeys: [accountAKeyPair.toString()],
     });
-    await sleep(1000)
+    await sleep(1000);
     await executor.start();
 
     // Push 5 transfers
@@ -190,7 +190,7 @@ describe("Executor - Basic Batch Processing", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -220,7 +220,7 @@ describe("Executor - Basic Batch Processing", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     // Push 10 transfers (should create 4 batches: 3+3+3+1)
@@ -236,7 +236,7 @@ describe("Executor - Basic Batch Processing", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -263,13 +263,13 @@ describe("Executor - Basic Batch Processing", () => {
     const initialBalanceB = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const initialBalanceC = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
     );
 
     queue.push({
@@ -286,13 +286,13 @@ describe("Executor - Basic Batch Processing", () => {
     const finalBalanceB = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const finalBalanceC = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -375,7 +375,7 @@ describe("Executor - Recovery Mechanism", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     // Now start executor - it should recover the pending transaction
@@ -391,7 +391,7 @@ describe("Executor - Recovery Mechanism", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -526,7 +526,7 @@ describe("Executor - Queue Merging Behavior", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     // Push multiple transfers to same account
@@ -548,7 +548,7 @@ describe("Executor - Queue Merging Behavior", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -578,7 +578,7 @@ describe("Executor - Queue Merging Behavior", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     // Push multiple transfers to same account
@@ -600,7 +600,7 @@ describe("Executor - Queue Merging Behavior", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -687,7 +687,7 @@ describe("Executor - MinQueueToProcess Threshold", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     // Push exactly 5 items (meets threshold)
@@ -703,7 +703,7 @@ describe("Executor - MinQueueToProcess Threshold", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -746,7 +746,7 @@ describe("Executor - Storage Deposit Handling", () => {
     const initialBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
     );
 
     expect(initialBalance).toBe("0");
@@ -763,7 +763,7 @@ describe("Executor - Storage Deposit Handling", () => {
     const finalBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
     );
 
     const stats = queue.getStats();
@@ -774,7 +774,7 @@ describe("Executor - Storage Deposit Handling", () => {
     const storageBalance = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "storage_balance_of",
-      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
     );
 
     expect(storageBalance).not.toBeNull();
@@ -853,17 +853,17 @@ describe("Executor - Storage Deposit Handling", () => {
     const balanceB = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-b.${DEFAULT_ACCOUNT_ID}` },
     );
     const balanceD = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-d.${DEFAULT_ACCOUNT_ID}` },
     );
     const balanceC = await provider.callFunction(
       `account-a.${DEFAULT_ACCOUNT_ID}`,
       "ft_balance_of",
-      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` }
+      { account_id: `account-c.${DEFAULT_ACCOUNT_ID}` },
     );
 
     expect(BigInt(balanceB!.toString())).toBeGreaterThanOrEqual(100n);
@@ -942,6 +942,43 @@ describe("Executor - Batch Transaction Storage", () => {
     // tx_hash should be updated with actual hash from RPC
     expect(successBatches[0]!.tx_hash).toBeTruthy();
     expect(successBatches[0]!.tx_hash.length).toBeGreaterThan(0);
+
+    executor.stop();
+  }, 30000);
+
+  test("should mark item as stalled when ActionError occurs during transaction", async () => {
+    executor = new Executor(queue, {
+      rpcUrl: sandbox.rpcUrl,
+      accountId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      contractId: `account-a.${DEFAULT_ACCOUNT_ID}`,
+      privateKeys: [accountAKeyPair.toString()],
+      maxRetries: 2,
+    });
+    await executor.start();
+
+    // Push a transfer to a non-existent account, but force has_storage_deposit=true
+    // This will cause the ft_transfer action to fail with an ActionError since the account isn't registered
+    queue.push({
+      receiver_account_id: `not-registered.${DEFAULT_ACCOUNT_ID}`,
+      amount: "100",
+      has_storage_deposit: true, // This forces skipping storage_deposit, but account doesn't exist
+    });
+
+    // Wait for the batch to fail and be recovered
+    const batchFailedPromise = new Promise<void>((resolve) => {
+      executor.once("batchFailed", () => {
+        resolve();
+      });
+    });
+    await batchFailedPromise;
+
+    // Check that the item was marked as stalled
+    const items = queue.getAll({ is_stalled: true });
+    expect(items.length).toBe(1);
+    expect(items[0]!.receiver_account_id).toBe(`not-registered.${DEFAULT_ACCOUNT_ID}`);
+    expect(items[0]!.is_stalled).toBe(1);
+    expect(items[0]!.retry_count).toBeGreaterThan(0);
+    expect(items[0]!.batch_id).toBeNull(); // Should be reset to pending by recoverFailedBatch
 
     executor.stop();
   }, 30000);
