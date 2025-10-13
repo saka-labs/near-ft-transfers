@@ -156,6 +156,45 @@ export class Queue extends EventEmitter {
     return items;
   }
 
+  reserveBatch(limit: number = 10): QueueItem[] {
+    const now = Date.now();
+
+    // Reserve items atomically using a transaction
+    const tx = this.db.transaction(() => {
+      // Get pending items first
+      const items = this.db
+        .query(
+          "SELECT * FROM queue WHERE batch_id IS NULL AND is_stalled = 0 ORDER BY id ASC LIMIT ?",
+        )
+        .all(limit) as QueueItem[];
+
+      if (items.length === 0) {
+        return [];
+      }
+
+      // Mark these items as reserved by setting a temporary batch_id that indicates they're being processed
+      // We'll use negative batch_id to indicate reservation (temporary state)
+      const tempBatchId = -(now); // Use negative timestamp as temp batch_id
+      const itemIds = items.map(item => item.id);
+      const placeholders = itemIds.map(() => "?").join(",");
+
+      this.db.run(
+        `UPDATE queue SET batch_id = ?, updated_at = ? WHERE id IN (${placeholders})`,
+        [tempBatchId, now, ...itemIds]
+      );
+
+      return items;
+    });
+
+    const items = tx();
+
+    if (items.length > 0) {
+      this.emit("reserved", items);
+    }
+
+    return items;
+  }
+
   createSignedTransaction(
     txHash: string,
     signedTx: string,
@@ -174,7 +213,7 @@ export class Queue extends EventEmitter {
         .get() as { id: number };
       const batchId = result.id;
 
-      // Associate queue items with this batch
+      // Associate queue items with this batch (overwriting the temporary negative batch_id)
       const placeholders = queueIds.map(() => "?").join(",");
       this.db.run(
         `UPDATE queue SET batch_id = ?, updated_at = ? WHERE id IN (${placeholders})`,
@@ -187,6 +226,7 @@ export class Queue extends EventEmitter {
     return tx();
   }
 
+  
   markBatchSuccess(batchId: number, txHash: string) {
     const now = Date.now();
     const items = this.db
@@ -383,6 +423,13 @@ export class Queue extends EventEmitter {
       this.db.run("DELETE FROM batch_transactions WHERE status != ?", [
         QueueStatus.SUCCESS,
       ]);
+
+      // Clean up any abandoned reservations (negative batch_ids older than 5 minutes)
+      const fiveMinutesAgo = now - (5 * 60 * 1000);
+      this.db.run(
+        "UPDATE queue SET batch_id = NULL, updated_at = ? WHERE batch_id < 0 AND batch_id > ?",
+        [now, -fiveMinutesAgo]
+      );
     });
 
     tx();
@@ -409,6 +456,19 @@ export class Queue extends EventEmitter {
       ) as QueueStats;
 
     return stats;
+  }
+
+  releaseReservations(queueIds: number[]) {
+    if (queueIds.length === 0) return;
+
+    const now = Date.now();
+    const placeholders = queueIds.map(() => "?").join(",");
+
+    // Only release reservations (negative batch_ids), not real batches
+    this.db.run(
+      `UPDATE queue SET batch_id = NULL, updated_at = ? WHERE id IN (${placeholders}) AND batch_id < 0`,
+      [now, ...queueIds]
+    );
   }
 
   hasPendingOrProcessing(): boolean {

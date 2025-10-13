@@ -30,8 +30,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    expose:
-      - 3000
+    ports:
+      - "3000:3000"
 
 volumes:
   near-ft-data:

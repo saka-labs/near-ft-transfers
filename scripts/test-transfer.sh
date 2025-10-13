@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-AMOUNT="${AMOUNT:-1000000000000000000000000}"
-URL="${URL:-http://localhost:3000/transfer}"
+AMOUNT="${AMOUNT:-1}"
+URL="${URL:-https://near-ft-transfers.sakalabs.dev/transfer}"
 ITERATIONS="${ITERATIONS:-10}"
 
 echo "Testing transfer endpoint..."

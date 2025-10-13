@@ -5,8 +5,6 @@ import { EventEmitter } from "events";
 import {
   createClient,
   createMemoryKeyService,
-  testnet,
-  mainnet,
   createMemorySigner,
   functionCall,
 } from "@eclipseeer/near-api-ts";
@@ -55,6 +53,7 @@ export class Executor extends EventEmitter {
   private client: Awaited<ReturnType<typeof createClient>>;
 
   private maxConcurrency: number;
+  private workers: Promise<void>[] = [];
 
   constructor(
     queue: Queue,
@@ -131,7 +130,7 @@ export class Executor extends EventEmitter {
     await this.recoverProcessingTransactions();
     this.queue.recover();
     this.isRunning = true;
-    this.run();
+    this.startWorkers();
   }
 
   private async recoverProcessingTransactions() {
@@ -168,6 +167,13 @@ export class Executor extends EventEmitter {
 
   stop() {
     this.isRunning = false;
+
+    // Wait for all workers to finish
+    if (this.workers.length > 0) {
+      Promise.allSettled(this.workers).then(() => {
+        console.info("All workers stopped");
+      });
+    }
   }
 
   async waitUntilIdle(): Promise<void> {
@@ -182,40 +188,54 @@ export class Executor extends EventEmitter {
     });
   }
 
-  private async run() {
+  private startWorkers() {
+    console.info(`Starting ${this.maxConcurrency} workers for continuous processing...`);
+
+    // Start all workers
+    for (let i = 0; i < this.maxConcurrency; i++) {
+      const workerId = i;
+      const workerPromise = this.worker(workerId);
+      this.workers.push(workerPromise);
+    }
+
+    // Start a monitoring loop for idle detection and events
+    this.monitoringLoop();
+  }
+
+  private async worker(workerId: number) {
+    console.info(`Worker ${workerId} started`);
+
     while (this.isRunning) {
       try {
-        const startTime = Date.now();
-        const totalItemsNeeded = this.maxConcurrency * this.options.batchSize!;
-        const allItems = this.queue.peek(totalItemsNeeded);
+        const items = this.queue.reserveBatch(this.options.batchSize!);
 
-        if (allItems.length >= this.options.minQueueToProcess!) {
-          const batchPromises: Promise<void>[] = [];
+        if (items.length >= this.options.minQueueToProcess!) {
+          const startTime = Date.now();
+          console.info(`Worker ${workerId}: Reserved and processing batch of ${items.length} items`);
 
-          for (let i = 0; i < this.maxConcurrency; i++) {
-            const startIdx = i * this.options.batchSize!;
-            const endIdx = startIdx + this.options.batchSize!;
-            const batchItems = allItems.slice(startIdx, endIdx);
+          await this.processBatch(items);
 
-            if (batchItems.length < this.options.minQueueToProcess!) {
-              break; // Not enough items for this batch
-            }
+          const processTime = Date.now() - startTime;
+          console.info(`Worker ${workerId}: Batch processed in ${processTime}ms`);
 
-            // Process batch in parallel
-            const batchPromise = this.processBatch(batchItems);
-            batchPromises.push(batchPromise);
-          }
-
-          // Wait for all batches to complete
-          if (batchPromises.length > 0) {
-            await Promise.allSettled(batchPromises);
-          }
+          // Emit loop completed event
+          this.emit("loopCompleted");
+        } else {
+          // No work available, short sleep
+          await sleep(Math.min(100, this.options.interval!));
         }
-        const processTime = Date.now() - startTime;
+      } catch (error) {
+        console.error(`Worker ${workerId} error:`, error);
+        await sleep(this.options.interval!);
+      }
+    }
 
-        // Emit loop completed event
-        this.emit("loopCompleted");
+    console.info(`Worker ${workerId} stopped`);
+  }
 
+  private async monitoringLoop() {
+    while (this.isRunning) {
+      try {
         // Check if queue is idle and notify waiters
         if (
           !this.queue.hasPendingOrProcessing() &&
@@ -226,11 +246,9 @@ export class Executor extends EventEmitter {
           resolvers.forEach((resolve) => resolve());
         }
 
-        // Wait before next poll, adjusted for processing time
-        const sleepTime = Math.max(0, this.options.interval! - processTime);
-        await sleep(sleepTime);
+        await sleep(this.options.interval!);
       } catch (error) {
-        console.error("Executor error:", error);
+        console.error("Monitoring loop error:", error);
         await sleep(this.options.interval!);
       }
     }
@@ -258,7 +276,15 @@ export class Executor extends EventEmitter {
     // but handle it gracefully
     if (itemsToProcess.length === 0) {
       console.warn("No items could fit in batch due to action limit");
+      // Release reservations for all items
+      this.releaseReservations(items.map(item => item.id));
       return;
+    }
+
+    // If we're not processing all items, release reservations for the unprocessed ones
+    if (itemsToProcess.length < items.length) {
+      const unprocessedItemIds = items.slice(itemsToProcess.length).map(item => item.id);
+      this.releaseReservations(unprocessedItemIds);
     }
 
     const itemIds = itemsToProcess.map((item) => item.id);
@@ -422,6 +448,10 @@ export class Executor extends EventEmitter {
     await sleep(1000);
 
     return errorMessage;
+  }
+
+  private releaseReservations(queueIds: number[]) {
+    this.queue.releaseReservations(queueIds);
   }
 
   private createActionsForItem(

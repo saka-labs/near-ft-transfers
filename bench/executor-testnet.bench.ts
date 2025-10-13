@@ -7,7 +7,7 @@ import { Queue } from "../src/queue";
 import { Executor } from "../src/executor";
 
 async function runBenchmark() {
-  const TRANSFER_COUNT = 1000;
+  const TRANSFER_COUNT = 10000;
   const AMOUNT_PER_TRANSFER = 100;
   const BATCH_SIZE = 100;
 
@@ -22,8 +22,8 @@ async function runBenchmark() {
     "ed25519:24VKtS9FZCR1pMgj2q3mAHcrrqC1pAaNbXwPWru86Jqm3fCLkBmqs8U3kq8o6ToEo9uZiJe6AaK9kcZPTwZJPo34",
     "ed25519:3cL4t9ZLznwJAJ2unVFigSwWoYxavTrJnCGPoWjtnq1YWCbg4BQYNdhvxW9md7qfpwUan7eCJesmsqMQdnaJRhxf",
     "ed25519:588epj9ZMhdYhqwmpqWvoxu4GeL1CS9QzF6BMQsQkpUMyj6SzeBe2V4tFwT7N9YqWCbuc5HagTD9fjUpTFHa4XZs",
-    "ed25519:4PHTkvVJVJCXHm1bTjNqk43GsrhJgj9FYbzd9Qe248Vc5Eiitp4QWpmr2x1L8gnYcyC5Z7GDPku6DTdkZKFjoj7d",
-    "ed25519:K9aE4rmsk4N5GZX2oe98u2sJ3cyieoyT5JDJjhdWAPz6tpH8NKBGpf54XoY6hSw5RxRQBobULXSbhtiRJQEYQ1i"
+    // "ed25519:4PHTkvVJVJCXHm1bTjNqk43GsrhJgj9FYbzd9Qe248Vc5Eiitp4QWpmr2x1L8gnYcyC5Z7GDPku6DTdkZKFjoj7d",
+    // "ed25519:K9aE4rmsk4N5GZX2oe98u2sJ3cyieoyT5JDJjhdWAPz6tpH8NKBGpf54XoY6hSw5RxRQBobULXSbhtiRJQEYQ1i",
     // Add more private keys here for parallel processing:
     // "ed25519:YourSecondKey...",
     // "ed25519:YourThirdKey...",
@@ -88,11 +88,52 @@ async function runBenchmark() {
   // Benchmark: Process transfers
   const processingStartTime = Date.now();
   await executor.start();
-  await executor.waitUntilIdle();
+
+  // Wait for processing to complete with better timeout and retry logic
+  let waitedTime = 0;
+  const maxWaitTime = 60000; // 60 seconds
+  const checkInterval = 1000;
+  let lastStats = queue.getStats();
+
+  console.log("⏳ Waiting for processing to complete...");
+
+  while (waitedTime < maxWaitTime) {
+    await new Promise(resolve => setTimeout(resolve, checkInterval));
+    waitedTime += checkInterval;
+
+    const currentStats = queue.getStats();
+
+    // Only log if something changed
+    if (JSON.stringify(currentStats) !== JSON.stringify(lastStats)) {
+      console.log(`⏱️  [${waitedTime/1000}s] Queue stats:`, currentStats);
+      lastStats = currentStats;
+    }
+
+    if (!queue.hasPendingOrProcessing()) {
+      console.log("✅ Queue appears to be idle");
+
+      // Wait a bit more to make sure all workers finished
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const finalStats = queue.getStats();
+      if (finalStats.pending === 0 && finalStats.processing === 0) {
+        console.log("✅ Confirmed: All processing complete");
+        break;
+      }
+    }
+  }
+
+  if (waitedTime >= maxWaitTime) {
+    console.warn("⚠️  Timeout reached, but stopping executor...");
+  }
+
   const processingEndTime = Date.now();
   const processingTime = processingEndTime - processingStartTime;
 
   executor.stop();
+
+  // Wait for workers to fully stop
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
   const finalBalance = await accountA.callFunction({
     contractId: NEAR_CONTRACT_ID,
@@ -100,7 +141,76 @@ async function runBenchmark() {
     args: { account_id: NEAR_RECEIVER_ACCOUNT_ID },
   });
 
-  const stats = queue.getStats();
+  let stats = queue.getStats();
+  console.log("📊 Initial final stats:", stats);
+
+  // Check for any stuck items (debugging)
+  const allItems = db.query("SELECT * FROM queue ORDER BY id").all() as any[];
+  const pending = allItems.filter(item => item.batch_id === null);
+  const reserved = allItems.filter(item => item.batch_id && item.batch_id < 0);
+  const processing = allItems.filter(item => item.batch_id && item.batch_id > 0);
+
+  console.log(`🔍 Item breakdown: Pending=${pending.length}, Reserved=${reserved.length}, Processing=${processing.length}`);
+
+  // If there are stuck reservations, run recovery
+  if (reserved.length > 0) {
+    console.log("🔄 Found stuck reservations, running recovery...");
+    queue.recover();
+    stats = queue.getStats();
+    console.log("📊 Stats after recovery:", stats);
+  }
+
+  // Check for items that have batch_id but aren't counted as success in stats
+  const itemsWithBatchId = allItems.filter(item => item.batch_id && item.batch_id > 0);
+  const itemsNotAccountedFor = itemsWithBatchId.length - stats.success;
+
+  console.log(`🔍 Items with batch_id: ${itemsWithBatchId.length}, Success count: ${stats.success}, Not accounted: ${itemsNotAccountedFor}`);
+
+  if (itemsNotAccountedFor > 0) {
+    console.warn("⚠️  Items still marked as processing - checking batch transactions...");
+    const batchTxs = db.query("SELECT * FROM batch_transactions").all() as any[];
+    console.log("Batch transactions:", batchTxs.map(tx => ({
+      id: tx.id,
+      status: tx.status,
+      has_items: db.query("SELECT COUNT(*) as count FROM queue WHERE batch_id = ?", [tx.id]).get()
+    })));
+
+    // Find non-successful batch transactions and recover them
+    const failedBatches = batchTxs.filter(tx => tx.status !== 'success');
+    if (failedBatches.length > 0) {
+      console.log(`🔄 Found ${failedBatches.length} failed/incomplete batches, running recovery...`);
+
+      failedBatches.forEach(batch => {
+        console.log(`  Recovering batch ${batch.id} with status: ${batch.status}`);
+        queue.recoverFailedBatch(batch.id, `Batch recovery for testnet benchmark - status: ${batch.status}`);
+      });
+    }
+
+    // Find orphaned items (items pointing to non-existent batch transactions)
+    const existingBatchIds = new Set(batchTxs.map(tx => tx.id));
+    const orphanedItems = itemsWithBatchId.filter(item => !existingBatchIds.has(item.batch_id!));
+
+    if (orphanedItems.length > 0) {
+      console.log(`🔄 Found ${orphanedItems.length} orphaned items (pointing to deleted batches), resetting to pending...`);
+
+      const orphanedIds = orphanedItems.map(item => item.id);
+      const placeholders = orphanedIds.map(() => "?").join(",");
+
+      // Reset orphaned items to pending status
+      db.run(
+        `UPDATE queue SET batch_id = NULL, updated_at = ? WHERE id IN (${placeholders})`,
+        [Date.now(), ...orphanedIds]
+      );
+
+      console.log(`  Reset ${orphanedIds.length} items to pending`);
+    }
+
+    // Re-check stats after any recovery
+    if (failedBatches.length > 0 || orphanedItems.length > 0) {
+      stats = queue.getStats();
+      console.log("📊 Stats after recovery:", stats);
+    }
+  }
 
   // Report results
   console.info("\n===== BENCHMARK RESULTS =====");
