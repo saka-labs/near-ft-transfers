@@ -104,6 +104,21 @@ const EnvSchema = z.object({
     })
     .describe("Port for the HTTP server"),
 
+  // Validation configuration
+  SKIP_ACCOUNT_EXISTENCE: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((val) => val.toLowerCase() === "true")
+    .describe("Skip account existence validation (not recommended for production)"),
+
+  SKIP_STORAGE_CHECK: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((val) => val.toLowerCase() === "true")
+    .describe("Skip storage deposit validation (not recommended for production)"),
+
   // Optional: Node environment
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -122,6 +137,8 @@ export interface ParsedEnvConfig {
   databasePath: string;
   minTransferAmount: bigint;
   maxTransferAmount: bigint;
+  skipAccountExistence: boolean;
+  skipStorageCheck: boolean;
   host: string;
   port: number;
   nodeEnv: "development" | "production" | "test";
@@ -141,6 +158,8 @@ function validateEnv(): ParsedEnvConfig {
       MAX_TRANSFER_AMOUNT: process.env.MAX_TRANSFER_AMOUNT,
       HOST: process.env.HOST,
       PORT: process.env.PORT,
+      SKIP_ACCOUNT_EXISTENCE: process.env.SKIP_ACCOUNT_EXISTENCE,
+      SKIP_STORAGE_CHECK: process.env.SKIP_STORAGE_CHECK,
       NODE_ENV: process.env.NODE_ENV,
     });
 
@@ -154,6 +173,8 @@ function validateEnv(): ParsedEnvConfig {
       databasePath: validated.DATABASE_PATH,
       minTransferAmount: validated.MIN_TRANSFER_AMOUNT,
       maxTransferAmount: validated.MAX_TRANSFER_AMOUNT,
+      skipAccountExistence: validated.SKIP_ACCOUNT_EXISTENCE,
+      skipStorageCheck: validated.SKIP_STORAGE_CHECK,
       host: validated.HOST,
       port: validated.PORT,
       nodeEnv: validated.NODE_ENV,
@@ -186,7 +207,7 @@ export const isProduction = (): boolean => env.nodeEnv === "production";
 export const isDevelopment = (): boolean => env.nodeEnv === "development";
 export const isTest = (): boolean => env.nodeEnv === "test";
 
-export const getSafeEnvInfo = (): Record<string, string | number> => ({
+export const getSafeEnvInfo = (): Record<string, string | number | boolean> => ({
   nearRpcUrl: env.nearRpcUrl,
   nearAccountId: env.nearAccountId,
   nearContractId: env.nearContractId,
@@ -197,6 +218,8 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   databasePath: env.databasePath,
   minTransferAmount: env.minTransferAmount.toString(),
   maxTransferAmount: env.maxTransferAmount.toString(),
+  skipAccountExistence: env.skipAccountExistence,
+  skipStorageCheck: env.skipStorageCheck,
   host: env.host,
   port: env.port,
   nodeEnv: env.nodeEnv,

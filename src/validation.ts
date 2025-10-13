@@ -14,6 +14,7 @@ export type BatchValidationResult = {
 export type ValidatorOptions = {
   cacheTTL?: number;
   skipStorageCheck?: boolean;
+  skipAccountExistence?: boolean;
   timeout?: number;
 };
 
@@ -26,6 +27,7 @@ export class AccountValidator {
 
   private cacheTTL: number;
   private skipStorageCheck: boolean;
+  private skipAccountExistence: boolean;
   private timeout: number;
 
   constructor(
@@ -37,7 +39,8 @@ export class AccountValidator {
     this.contractId = contractId;
     this.cacheTTL = options.cacheTTL ?? 60000;
     this.skipStorageCheck = options.skipStorageCheck ?? false;
-    this.timeout = options.timeout ?? 10000;
+    this.skipAccountExistence = options.skipAccountExistence ?? false;
+    this.timeout = options.timeout ?? 5000;
   }
 
   async accountExists(accountId: string): Promise<boolean> {
@@ -126,30 +129,36 @@ export class AccountValidator {
 
   async validate(accountId: string): Promise<ValidationResult> {
     try {
-      const exists = await this.accountExists(accountId);
+      let accountExists = true; // Default assumption
 
-      if (!exists) {
-        return {
-          isValid: false,
-          error: `Account '${accountId}' does not exist on NEAR`,
-          accountExists: false,
-        };
+      // Check account existence only if not skipped
+      if (!this.skipAccountExistence) {
+        accountExists = await this.accountExists(accountId);
+
+        if (!accountExists) {
+          return {
+            isValid: false,
+            error: `Account '${accountId}' does not exist on NEAR`,
+            accountExists: false,
+          };
+        }
       }
 
+      // Always check storage deposit unless specifically skipped
       const hasDeposit = await this.hasStorageDeposit(accountId);
 
       if (!hasDeposit) {
         return {
           isValid: false,
           error: `Account '${accountId}' has not registered storage deposit on the FT contract`,
-          accountExists: true,
+          accountExists: accountExists, // Use actual or assumed account existence
           hasStorageDeposit: false,
         };
       }
 
       return {
         isValid: true,
-        accountExists: true,
+        accountExists: accountExists, // Use actual or assumed account existence
         hasStorageDeposit: true,
       };
     } catch (error: any) {

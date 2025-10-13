@@ -37,8 +37,9 @@ const validator = new AccountValidator(
   env.nearContractId,
   {
     cacheTTL: 300000, // 5 minutes
-    timeout: 10000, // 10 seconds
-    skipStorageCheck: false, // Set to true to skip storage deposit validation
+    timeout: 3000, // 3 seconds
+    skipStorageCheck: env.skipStorageCheck, // Use environment configuration
+    skipAccountExistence: env.skipAccountExistence, // Use environment configuration
   },
 );
 
