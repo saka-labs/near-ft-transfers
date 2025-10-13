@@ -1,4 +1,21 @@
 import { z } from "@hono/zod-openapi";
+import { env } from "./env";
+
+// Custom amount validator that checks min/max limits
+const amountSchema = z.string()
+  .regex(/^\d+$/, "amount must be a valid numeric string")
+  .transform((val) => BigInt(val))
+  .refine((amount) => amount >= env.minTransferAmount, {
+    message: `amount must be at least ${env.minTransferAmount.toString()}`
+  })
+  .refine((amount) => amount <= env.maxTransferAmount, {
+    message: `amount must not exceed ${env.maxTransferAmount.toString()}`
+  })
+  .transform((amount) => amount.toString())
+  .openapi({
+    example: env.maxTransferAmount.toString(),
+    description: `Amount in smallest token unit (e.g., yoctoNEAR). Must be between ${env.minTransferAmount.toString()} and ${env.maxTransferAmount.toString()}`
+  });
 
 // Request schemas
 export const TransferRequestSchema = z.object({
@@ -6,10 +23,7 @@ export const TransferRequestSchema = z.object({
     example: "alice.testnet",
     description: "NEAR account ID to receive the tokens"
   }),
-  amount: z.string().regex(/^\d+$/, "amount must be a valid numeric string").openapi({
-    example: "1000000",
-    description: "Amount in smallest token unit (e.g., yoctoNEAR)"
-  }),
+  amount: amountSchema,
   memo: z.string().optional().openapi({
     example: "Payment for services",
     description: "Optional memo for the transfer"

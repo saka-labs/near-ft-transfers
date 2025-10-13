@@ -51,6 +51,33 @@ const EnvSchema = z.object({
     .default(":memory:")
     .describe("Database file path. Use ':memory:' for in-memory database (default)"),
 
+  // Transfer amount configuration
+  MIN_TRANSFER_AMOUNT: z
+    .string()
+    .optional()
+    .default("1")
+    .transform((val) => {
+      const parsed = BigInt(val);
+      if (parsed < 0n) {
+        throw new Error("MIN_TRANSFER_AMOUNT must be non-negative");
+      }
+      return parsed;
+    })
+    .describe("Minimum transfer amount in smallest token unit"),
+
+  MAX_TRANSFER_AMOUNT: z
+    .string()
+    .optional()
+    .default("1")
+    .transform((val) => {
+      const parsed = BigInt(val);
+      if (parsed < 0n) {
+        throw new Error("MAX_TRANSFER_AMOUNT must be non-negative");
+      }
+      return parsed;
+    })
+    .describe("Maximum transfer amount in smallest token unit"),
+
   // Server configuration
   HOST: z
     .string()
@@ -93,6 +120,8 @@ export interface ParsedEnvConfig {
   nearPrivateKeys: string[];
   maxRetries: number;
   databasePath: string;
+  minTransferAmount: bigint;
+  maxTransferAmount: bigint;
   host: string;
   port: number;
   nodeEnv: "development" | "production" | "test";
@@ -108,6 +137,8 @@ function validateEnv(): ParsedEnvConfig {
       NEAR_PRIVATE_KEYS: process.env.NEAR_PRIVATE_KEYS,
       MAX_RETRIES: process.env.MAX_RETRIES,
       DATABASE_PATH: process.env.DATABASE_PATH,
+      MIN_TRANSFER_AMOUNT: process.env.MIN_TRANSFER_AMOUNT,
+      MAX_TRANSFER_AMOUNT: process.env.MAX_TRANSFER_AMOUNT,
       HOST: process.env.HOST,
       PORT: process.env.PORT,
       NODE_ENV: process.env.NODE_ENV,
@@ -121,6 +152,8 @@ function validateEnv(): ParsedEnvConfig {
       nearPrivateKeys: validated.NEAR_PRIVATE_KEYS,
       maxRetries: validated.MAX_RETRIES,
       databasePath: validated.DATABASE_PATH,
+      minTransferAmount: validated.MIN_TRANSFER_AMOUNT,
+      maxTransferAmount: validated.MAX_TRANSFER_AMOUNT,
       host: validated.HOST,
       port: validated.PORT,
       nodeEnv: validated.NODE_ENV,
@@ -162,6 +195,8 @@ export const getSafeEnvInfo = (): Record<string, string | number> => ({
   concurrency: env.nearPrivateKeys.length,
   maxRetries: env.maxRetries,
   databasePath: env.databasePath,
+  minTransferAmount: env.minTransferAmount.toString(),
+  maxTransferAmount: env.maxTransferAmount.toString(),
   host: env.host,
   port: env.port,
   nodeEnv: env.nodeEnv,
