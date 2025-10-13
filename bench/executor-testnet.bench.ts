@@ -1,7 +1,4 @@
-import { Account } from "@near-js/accounts";
-import { KeyPair } from "@near-js/crypto";
-import { JsonRpcProvider, type Provider } from "@near-js/providers";
-import { KeyPairSigner } from "@near-js/signers";
+import { JsonRpcProvider } from "@near-js/providers";
 import { Database } from "bun:sqlite";
 import { Queue } from "../src/queue";
 import { Executor } from "../src/executor";
@@ -32,8 +29,6 @@ async function runBenchmark() {
   // This should be already has a storage deposit
   const NEAR_RECEIVER_ACCOUNT_ID = "jinakayam.testnet";
 
-  const keyPair = KeyPair.fromString(NEAR_PRIVATE_KEYS[0]! as any);
-
   console.info("===== NEAR FT Transfer Benchmark =====");
   console.info(`Transfer count: ${TRANSFER_COUNT}`);
   console.info(`Batch size: ${BATCH_SIZE}`);
@@ -41,11 +36,7 @@ async function runBenchmark() {
   console.info(`Private keys (concurrency): ${NEAR_PRIVATE_KEYS.length}`);
   console.info("=====================================\n");
 
-  const accountA = new Account(
-    NEAR_ACCOUNT_ID,
-    new JsonRpcProvider({ url: RPC_URL }) as Provider,
-    new KeyPairSigner(keyPair),
-  );
+  const provider = new JsonRpcProvider({ url: RPC_URL });
 
   // Initialize queue and executor
   const db = new Database(":memory:");
@@ -60,11 +51,11 @@ async function runBenchmark() {
     interval: 100,
   });
 
-  const initialBalance = await accountA.callFunction({
-    contractId: NEAR_CONTRACT_ID,
-    methodName: "ft_balance_of",
-    args: { account_id: NEAR_RECEIVER_ACCOUNT_ID },
-  });
+  const initialBalance = await provider.callFunction(
+    NEAR_CONTRACT_ID,
+    "ft_balance_of",
+    { account_id: NEAR_RECEIVER_ACCOUNT_ID },
+  );
 
   console.info(`Initial balance: ${initialBalance}`);
   console.info(`Pushing ${TRANSFER_COUNT} items to queue...`);
@@ -94,11 +85,11 @@ async function runBenchmark() {
 
   executor.stop();
 
-  const finalBalance = await accountA.callFunction({
-    contractId: NEAR_CONTRACT_ID,
-    methodName: "ft_balance_of",
-    args: { account_id: NEAR_RECEIVER_ACCOUNT_ID },
-  });
+  const finalBalance = await provider.callFunction(
+    NEAR_CONTRACT_ID,
+    "ft_balance_of",
+    { account_id: NEAR_RECEIVER_ACCOUNT_ID },
+  );
 
   const stats = queue.getStats();
 
@@ -122,7 +113,7 @@ async function runBenchmark() {
 
   // Verify results
   const expectedBalance = (
-    BigInt(initialBalance.toString()) +
+    BigInt(initialBalance!.toString()) +
     BigInt(TRANSFER_COUNT) * BigInt(AMOUNT_PER_TRANSFER)
   ).toString();
 
