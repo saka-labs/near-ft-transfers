@@ -338,6 +338,7 @@ export class Executor extends EventEmitter {
     items?: QueueItem[],
   ): { isValid: boolean; errorMessage?: string } {
     const status = result.status as TransactionStatus;
+    console.error('Error tx validation', JSON.stringify(status, null, 2));
 
     if (!status.Failure) {
       return { isValid: true };
@@ -347,7 +348,6 @@ export class Executor extends EventEmitter {
       const actionIndex = status.Failure.ActionError.index;
       const kind = status.Failure.ActionError.kind;
       const errorMessage = JSON.stringify(kind);
-      console.info({ kind, errorMessage });
 
       if (actionIndex !== undefined && items) {
         const item = items[actionIndex]!;
@@ -387,20 +387,41 @@ export class Executor extends EventEmitter {
     batchId: number | undefined,
     context: string,
   ): Promise<string> {
-    const errorMessage = (error as any).message;
+    let errorMessage: string;
+
+    if ((error as any).message) {
+      errorMessage = (error as any).message;
+    } else {
+      errorMessage = JSON.stringify(error);
+    }
     console.error(`${context}:`, JSON.stringify(error, null, 2));
+
+    let withoutRetryCount = false;
+    let data = (error as any).data;
+
+    // This is very rare case, just in case
+    if (data?.TxExecutionError?.InvalidTxError?.InvalidNonce) {
+      console.info(
+        "Invalid nonce, recover without increasing retry count, sleeping for 1 second",
+      );
+      await sleep(1000);
+      withoutRetryCount = true;
+    }
+
+    // TODO: proper rate limit handling
+    if (errorMessage.toLowerCase().includes("rate limit")) {
+      console.info("Rate limit exceeded, sleeping for 5 seconds");
+      await sleep(5000);
+      withoutRetryCount = true;
+    }
 
     if (batchId) {
       this.queue.recoverFailedBatch(
         batchId,
         errorMessage,
         this.options.maxRetries,
+        withoutRetryCount,
       );
-    }
-
-    if (errorMessage.toLowerCase().includes("rate limit")) {
-      console.info("Rate limit exceeded, sleeping for 5 seconds");
-      await sleep(5000);
     }
 
     return errorMessage;

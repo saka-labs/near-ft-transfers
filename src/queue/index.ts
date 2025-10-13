@@ -53,7 +53,9 @@ export class Queue extends EventEmitter {
       `CREATE INDEX IF NOT EXISTS idx_account_batch ON queue(receiver_account_id, batch_id)`,
     );
     // Index for efficient lookup by is_stalled status
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_is_stalled ON queue(is_stalled)`);
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_is_stalled ON queue(is_stalled)`,
+    );
 
     // Table for storing batch transactions
     this.db.run(`
@@ -74,9 +76,17 @@ export class Queue extends EventEmitter {
     );
   }
 
-  push(transfer: TransferRequest & { has_storage_deposit?: boolean; memo?: string }): number {
+  push(
+    transfer: TransferRequest & {
+      has_storage_deposit?: boolean;
+      memo?: string;
+    },
+  ): number {
     const now = Date.now();
-    const hasStorageDeposit = transfer.has_storage_deposit ?? this.options.defaultHasStorageDeposit ?? false;
+    const hasStorageDeposit =
+      transfer.has_storage_deposit ??
+      this.options.defaultHasStorageDeposit ??
+      false;
 
     const tx = this.db.transaction(() => {
       if (this.options.mergeExistingAccounts) {
@@ -86,9 +96,9 @@ export class Queue extends EventEmitter {
             "SELECT id, amount FROM queue WHERE receiver_account_id = ? AND batch_id IS NULL LIMIT 1",
           )
           .get(transfer.receiver_account_id) as {
-            id: number;
-            amount: string;
-          } | null;
+          id: number;
+          amount: string;
+        } | null;
 
         if (existing) {
           // Add amounts together (both are string numbers)
@@ -97,7 +107,13 @@ export class Queue extends EventEmitter {
           ).toString();
           this.db.run(
             "UPDATE queue SET amount = ?, memo = ?, has_storage_deposit = ?, updated_at = ? WHERE id = ?",
-            [newAmount, transfer.memo || null, hasStorageDeposit ? 1 : 0, now, existing.id],
+            [
+              newAmount,
+              transfer.memo || null,
+              hasStorageDeposit ? 1 : 0,
+              now,
+              existing.id,
+            ],
           );
           return existing.id;
         }
@@ -242,7 +258,12 @@ export class Queue extends EventEmitter {
     return result.changes;
   }
 
-  recoverFailedBatch(batchId: number, errorMessage?: string, maxRetries?: number) {
+  recoverFailedBatch(
+    batchId: number,
+    errorMessage?: string,
+    maxRetries?: number,
+    withoutRetryCount?: boolean,
+  ) {
     const now = Date.now();
     const items = this.db
       .query("SELECT * FROM queue WHERE batch_id = ?")
@@ -259,18 +280,20 @@ export class Queue extends EventEmitter {
         );
       }
 
-      // Reset queue items to pending by clearing batch_id and incrementing retry_count
-      this.db.run(
-        "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, updated_at = ? WHERE batch_id = ?",
-        [now, batchId],
-      );
-
-      // If maxRetries is specified, mark items that exceed retry limit as stalled
-      if (maxRetries !== undefined) {
+      if (!withoutRetryCount) {
+        // Reset queue items to pending by clearing batch_id and incrementing retry_count
         this.db.run(
-          "UPDATE queue SET is_stalled = 1 WHERE batch_id IS NULL AND retry_count > ?",
-          [maxRetries],
+          "UPDATE queue SET batch_id = NULL, retry_count = retry_count + 1, updated_at = ? WHERE batch_id = ?",
+          [now, batchId],
         );
+
+        // If maxRetries is specified, mark items that exceed retry limit as stalled
+        if (maxRetries !== undefined) {
+          this.db.run(
+            "UPDATE queue SET is_stalled = 1 WHERE batch_id IS NULL AND retry_count > ?",
+            [maxRetries],
+          );
+        }
       }
     });
 
@@ -308,7 +331,9 @@ export class Queue extends EventEmitter {
     return this.db.query(query).all(...params) as QueueItem[];
   }
 
-  getBatchTransactionById(batchId: number): { status: string; tx_hash: string } | null {
+  getBatchTransactionById(
+    batchId: number,
+  ): { status: string; tx_hash: string } | null {
     return this.db
       .query("SELECT status, tx_hash FROM batch_transactions WHERE id = ?")
       .get(batchId) as { status: string; tx_hash: string } | null;
@@ -326,10 +351,10 @@ export class Queue extends EventEmitter {
         "SELECT id, tx_hash, signed_tx FROM batch_transactions WHERE status = ? AND signed_tx IS NOT NULL",
       )
       .all(QueueStatus.PROCESSING) as Array<{
-        id: number;
-        tx_hash: string;
-        signed_tx: string;
-      }>;
+      id: number;
+      tx_hash: string;
+      signed_tx: string;
+    }>;
 
     // For each batch transaction, get the associated queue item IDs
     return batchTxs.map((tx) => {
