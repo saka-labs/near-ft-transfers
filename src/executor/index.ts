@@ -338,11 +338,11 @@ export class Executor extends EventEmitter {
     items?: QueueItem[],
   ): { isValid: boolean; errorMessage?: string } {
     const status = result.status as TransactionStatus;
-    console.error('Error tx validation', JSON.stringify(status, null, 2));
-
     if (!status.Failure) {
       return { isValid: true };
     }
+
+    console.error("Error tx validation", JSON.stringify(status, null, 2));
 
     if (status.Failure.ActionError) {
       const actionIndex = status.Failure.ActionError.index;
